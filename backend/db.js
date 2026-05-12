@@ -1,243 +1,211 @@
 import fs from 'fs';
+import path from 'path';
 import Database from 'better-sqlite3';
-import crypto from 'crypto';
+import { fileURLToPath } from 'url';
 
-// Ensure data directory exists
-const dataDir = './data';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const dataDir = path.join(__dirname, '../data');
 if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+    fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const db = new Database('./data/app.db');
+const db = new Database(path.join(dataDir, 'app.db'));
 db.pragma('journal_mode = WAL');
 
-// Schema Definition
-const schema = `
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    created_at DATETIME DEFAULT (datetime('now'))
-  );
+const createTables = () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            name TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
 
-  CREATE TABLE IF NOT EXISTS content (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    type TEXT NOT NULL CHECK(type IN ('movie', 'series', 'anime')),
-    title TEXT NOT NULL,
-    poster_url TEXT,
-    backdrop_url TEXT,
-    description TEXT,
-    rating REAL,
-    year INTEGER,
-    genres TEXT,
-    quality TEXT CHECK(quality IN ('4K', 'HD', 'SD')),
-    duration INTEGER,
-    created_at DATETIME DEFAULT (datetime('now'))
-  );
+        CREATE TABLE IF NOT EXISTS content (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            poster_url TEXT,
+            backdrop_url TEXT,
+            year INTEGER,
+            rating REAL,
+            quality TEXT,
+            genres TEXT,
+            duration INTEGER,
+            video_url TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
 
-  CREATE TABLE IF NOT EXISTS seasons (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    content_id INTEGER NOT NULL,
-    season_number INTEGER NOT NULL,
-    title TEXT,
-    created_at DATETIME DEFAULT (datetime('now')),
-    FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE
-  );
+        CREATE TABLE IF NOT EXISTS seasons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content_id INTEGER NOT NULL,
+            season_number INTEGER NOT NULL,
+            title TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE
+        );
 
-  CREATE TABLE IF NOT EXISTS episodes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    season_id INTEGER NOT NULL,
-    episode_number INTEGER NOT NULL,
-    title TEXT,
-    duration INTEGER,
-    video_url TEXT,
-    thumbnail_url TEXT,
-    created_at DATETIME DEFAULT (datetime('now')),
-    FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE
-  );
+        CREATE TABLE IF NOT EXISTS episodes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content_id INTEGER NOT NULL,
+            season_id INTEGER,
+            episode_number INTEGER NOT NULL,
+            title TEXT,
+            video_url TEXT,
+            duration INTEGER,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
+            FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE
+        );
 
-  CREATE TABLE IF NOT EXISTS favorites (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    content_id INTEGER NOT NULL,
-    created_at DATETIME DEFAULT (datetime('now')),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
-    UNIQUE(user_id, content_id)
-  );
+        CREATE TABLE IF NOT EXISTS favorites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            content_id INTEGER NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE
+        );
 
-  CREATE TABLE IF NOT EXISTS watch_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    content_id INTEGER NOT NULL,
-    episode_id INTEGER,
-    progress INTEGER DEFAULT 0,
-    duration INTEGER,
-    last_watched_at DATETIME DEFAULT (datetime('now')),
-    completed INTEGER DEFAULT 0,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
-    FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE
-  );
+        CREATE TABLE IF NOT EXISTS watch_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            content_id INTEGER NOT NULL,
+            episode_id INTEGER,
+            progress_seconds INTEGER DEFAULT 0,
+            duration_seconds INTEGER,
+            last_watched_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
+            FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE
+        );
 
-  CREATE TABLE IF NOT EXISTS extensions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    description TEXT,
-    url TEXT,
-    enabled INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS subtitles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    episode_id INTEGER NOT NULL,
-    language TEXT NOT NULL,
-    url TEXT,
-    created_at DATETIME DEFAULT (datetime('now')),
-    FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE
-  );
-`;
-
-db.exec(schema);
-
-// Indexes for performance
-db.exec(`
-  CREATE INDEX IF NOT EXISTS idx_content_title ON content(title);
-  CREATE INDEX IF NOT EXISTS idx_content_type ON content(type);
-  CREATE INDEX IF NOT EXISTS idx_watch_history_user ON watch_history(user_id);
-  CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
-`);
-
-// Seed Data
-const hashPassword = (pwd) => {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const derivedKey = crypto.scryptSync(pwd, salt, 64);
-  return salt + ':' + derivedKey.toString('hex');
+        CREATE TABLE IF NOT EXISTS extensions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT,
+            enabled INTEGER DEFAULT 0,
+            version TEXT,
+            config_json TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+    `);
 };
 
-// Seed Users
-const insertUser = db.prepare('INSERT OR IGNORE INTO users (email, password_hash) VALUES (?, ?)');
-insertUser.run('demo@streambox.app', hashPassword('password123'));
+const seedData = () => {
+    const contentCount = db.prepare('SELECT COUNT(*) as count FROM content').get();
+    if (contentCount.count > 0) return;
 
-// Seed Extensions
-const insertExtension = db.prepare('INSERT INTO extensions (name, description, url, enabled) VALUES (?, ?, ?, ?)');
-const extensions = [
-  { name: 'OpenSubtitles', desc: 'Subtitles provider', url: 'https://api.opensubtitles.org', enabled: 1,
-      description: ''
-    },
-  { name: 'TMDB', desc: 'Metadata provider', url: 'https://api.themoviedb.org', enabled: 1,
-      description: ''
-    },
-  { name: 'StreamSource A', desc: 'Primary video server', url: 'https://cdn.example.com', enabled: 1,
-      description: ''
-    }
-];
-extensions.forEach(ex => insertExtension.run(ex.name, ex.desc, ex.url, ex.enabled));
+    const insertContent = db.prepare(`
+        INSERT OR IGNORE INTO content (type, title, description, poster_url, backdrop_url, year, rating, quality, genres, duration, video_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-// Seed Content
-const insertContent = db.prepare(`
-  INSERT INTO content (type, title, poster_url, backdrop_url, description, rating, year, genres, quality, duration) 
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`);
+    const insertSeason = db.prepare(`
+        INSERT OR IGNORE INTO seasons (content_id, season_number, title)
+        VALUES (?, ?, ?)
+    `);
 
-const contents = [
-  {
-    type: 'movie',
-    title: 'Inception',
-    poster: 'https://image.tmdb.org/t/p/w500/9gk7admal4zl67YrxIo2AO08qX8.jpg',
-    backdrop: 'https://image.tmdb.org/t/p/original/s3TBrRGB1iav7gFOCNx3H31MoES.jpg',
-    desc: 'A thief who steals corporate secrets through dream-sharing technology.',
-    rating: 8.8,
-    year: 2010,
-    genres: '["Sci-Fi", "Action", "Thriller"]',
-    quality: '4K',
-    duration: 8280
-  },
-  {
-    type: 'series',
-    title: 'Breaking Bad',
-    poster: 'https://image.tmdb.org/t/p/w500/ggFHVNu6YYI5L9pCfOacjizRGt.jpg',
-    backdrop: 'https://image.tmdb.org/t/p/original/tsRy63Mu5cu8etL1X7ZLyf7UP1M.jpg',
-    desc: 'A high school chemistry teacher turned methamphetamine manufacturer.',
-    rating: 9.5,
-    year: 2008,
-    genres: '["Crime", "Drama", "Thriller"]',
-    quality: 'HD',
-    duration: 2700
-  },
-  {
-    type: 'anime',
-    title: 'Attack on Titan',
-    poster: 'https://image.tmdb.org/t/p/w500/xHrfH39tVcAFyMvLqJt3gJAjmv1.jpg',
-    backdrop: 'https://image.tmdb.org/t/p/original/8cHZ3we8b1pjM2eLq53Jk1JRnvD.jpg',
-    desc: 'Humanity fights for survival against giant humanoid Titans.',
-    rating: 9.0,
-    year: 2013,
-    genres: '["Animation", "Action", "Adventure"]',
-    quality: 'HD',
-    duration: 1440
-  },
-  {
-    type: 'movie',
-    title: 'Interstellar',
-    poster: 'https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
-    backdrop: 'https://image.tmdb.org/t/p/original/xJHokMbljvjADYdit5fK5VQsXEG.jpg',
-    desc: 'A team of explorers travel through a wormhole in space.',
-    rating: 8.6,
-    year: 2014,
-    genres: '["Adventure", "Drama", "Sci-Fi"]',
-    quality: '4K',
-    duration: 9744
-  }
-];
+    const insertEpisode = db.prepare(`
+        INSERT OR IGNORE INTO episodes (content_id, season_id, episode_number, title, video_url, duration)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `);
 
-contents.forEach(c => insertContent.run(c.type, c.title, c.poster, c.backdrop, c.desc, c.rating, c.year, c.genres, c.quality, c.duration));
+    const insertExtension = db.prepare(`
+        INSERT OR IGNORE INTO extensions (name, description, enabled, version, config_json)
+        VALUES (?, ?, ?, ?, ?)
+    `);
 
-// Seed Seasons & Episodes (Breaking Bad)
-const bbContent = db.prepare('SELECT id FROM content WHERE title = ?').get('Breaking Bad');
-if (bbContent) {
-  const insertSeason = db.prepare('INSERT INTO seasons (content_id, season_number, title) VALUES (?, ?, ?)');
-  const s1 = insertSeason.run(bbContent.id, 1, 'Season 1');
-  
-  const insertEp = db.prepare('INSERT INTO episodes (season_id, episode_number, title, duration, video_url, thumbnail_url) VALUES (?, ?, ?, ?, ?, ?)');
-  insertEp.run(s1.lastInsertRowid, 1, 'Pilot', 2700, 'https://example.com/vid1.mp4', 'https://example.com/thumb1.jpg');
-  insertEp.run(s1.lastInsertRowid, 2, 'Cat\'s in the Bag...', 2700, 'https://example.com/vid2.mp4', 'https://example.com/thumb2.jpg');
-}
+    const movies = [
+        {
+            type: 'movie', title: 'Cyber Chronicles', description: 'A neon-soaked journey through a dystopian future.', 
+            poster_url: '/posters/cyber.jpg', backdrop_url: '/backdrops/cyber.jpg', year: 2024, rating: 8.5, quality: '4K', 
+            genres: 'Sci-Fi,Action', duration: 7200, video_url: '/videos/cyber.mp4'
+        },
+        {
+            type: 'movie', title: 'The Last Horizon', description: 'An epic space opera exploring the edge of the universe.', 
+            poster_url: '/posters/horizon.jpg', backdrop_url: '/backdrops/horizon.jpg', year: 2023, rating: 9.0, quality: '4K', 
+            genres: 'Sci-Fi,Drama', duration: 8400, video_url: '/videos/horizon.mp4'
+        },
+        {
+            type: 'movie', title: 'Shadow Protocol', description: 'A spy thriller with twists at every corner.', 
+            poster_url: '/posters/shadow.jpg', backdrop_url: '/backdrops/shadow.jpg', year: 2022, rating: 7.8, quality: 'HD', 
+            genres: 'Action,Thriller', duration: 6600, video_url: '/videos/shadow.mp4'
+        },
+        {
+            type: 'movie', title: 'Whispers in the Wind', description: 'A haunting mystery in the Scottish Highlands.', 
+            poster_url: '/posters/whispers.jpg', backdrop_url: '/backdrops/whispers.jpg', year: 2024, rating: 8.2, quality: 'HD', 
+            genres: 'Mystery,Drama', duration: 6000, video_url: '/videos/whispers.mp4'
+        }
+    ];
 
-// Seed Seasons & Episodes (Attack on Titan)
-const aotContent = db.prepare('SELECT id FROM content WHERE title = ?').get('Attack on Titan');
-if (aotContent) {
-  const insertSeason = db.prepare('INSERT INTO seasons (content_id, season_number, title) VALUES (?, ?, ?)');
-  const s1 = insertSeason.run(aotContent.id, 1, 'Season 1');
-  
-  const insertEp = db.prepare('INSERT INTO episodes (season_id, episode_number, title, duration, video_url, thumbnail_url) VALUES (?, ?, ?, ?, ?, ?)');
-  insertEp.run(s1.lastInsertRowid, 1, 'To You, in 2000 Years', 1440, 'https://example.com/aot1.mp4', 'https://example.com/aotthumb1.jpg');
-}
+    const series = [
+        {
+            type: 'series', title: 'Neon Nights', description: 'Detectives hunting rogue androids in 2088.', 
+            poster_url: '/posters/neon.jpg', backdrop_url: '/backdrops/neon.jpg', year: 2024, rating: 8.8, quality: '4K', 
+            genres: 'Sci-Fi,Crime'
+        },
+        {
+            type: 'series', title: 'Cosmic Voyage', description: 'A crew explores uncharted galaxies.', 
+            poster_url: '/posters/cosmic.jpg', backdrop_url: '/backdrops/cosmic.jpg', year: 2023, rating: 8.1, quality: 'HD', 
+            genres: 'Sci-Fi,Adventure'
+        }
+    ];
 
-// Seed Subtitles
-const insertSub = db.prepare('INSERT INTO subtitles (episode_id, language, url) VALUES (?, ?, ?)');
-const ep1 = db.prepare('SELECT id FROM episodes LIMIT 1').get();
-if (ep1) {
-  insertSub.run(ep1.id, 'English', 'https://example.com/subs/en.vtt');
-  insertSub.run(ep1.id, 'Italian', 'https://example.com/subs/it.vtt');
-}
+    const anime = [
+        {
+            type: 'anime', title: 'Spirit Hunter', description: 'A young exorcist battles ancient spirits.', 
+            poster_url: '/posters/spirit.jpg', backdrop_url: '/backdrops/spirit.jpg', year: 2024, rating: 9.2, quality: '4K', 
+            genres: 'Action,Supernatural'
+        },
+        {
+            type: 'anime', title: 'Mech Warriors', description: 'Giant robots defend Earth from invasion.', 
+            poster_url: '/posters/mech.jpg', backdrop_url: '/backdrops/mech.jpg', year: 2023, rating: 8.5, quality: 'HD', 
+            genres: 'Action,Mecha'
+        }
+    ];
 
-// Seed Watch History & Favorites for demo user
-const demoUser = db.prepare('SELECT id FROM users WHERE email = ?').get('demo@streambox.app');
-if (demoUser) {
-  const insertFav = db.prepare('INSERT OR IGNORE INTO favorites (user_id, content_id) VALUES (?, ?)');
-  const incContent = db.prepare('SELECT id FROM content WHERE title = ?').get('Inception');
-  if (incContent) insertFav.run(demoUser.id, incContent.id);
+    const extensions = [
+        { name: 'SubsPlus', description: 'Enhanced subtitle downloader for multiple languages.', enabled: 1, version: '1.2.0', config_json: '{"languages":["en","es","fr"]}' },
+        { name: 'StreamEnhancer', description: 'Improves video quality buffering for slow connections.', enabled: 0, version: '2.0.1', config_json: '{"buffer_size":512}' },
+        { name: 'TrailerHub', description: 'Automatically fetches latest trailers.', enabled: 1, version: '0.9.5', config_json: '{}' }
+    ];
 
-  const insertHistory = db.prepare(`
-    INSERT INTO watch_history (user_id, content_id, episode_id, progress, duration, completed) 
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  const bbEp = db.prepare('SELECT e.id FROM episodes e JOIN seasons s ON e.season_id = s.id JOIN content c ON s.content_id = c.id WHERE c.title = ? LIMIT 1').get('Breaking Bad');
-  if (bbEp && bbContent) {
-    insertHistory.run(demoUser.id, bbContent.id, bbEp.id, 1200, 2700, 0);
-  }
-}
+    const insertMany = db.transaction((items) => {
+        for (const item of items) insertContent.run(item.type, item.title, item.description, item.poster_url, item.backdrop_url, item.year, item.rating, item.quality, item.genres, item.duration || null, item.video_url || null);
+    });
+
+    insertMany(movies);
+    insertMany(series);
+    insertMany(anime);
+
+    extensions.forEach(ext => {
+        insertExtension.run(ext.name, ext.description, ext.enabled, ext.version, ext.config_json);
+    });
+
+    const seriesIds = db.prepare('SELECT id FROM content WHERE type = ?').all('series');
+    const animeIds = db.prepare('SELECT id FROM content WHERE type = ?').all('anime');
+
+    seriesIds.forEach(s => {
+        const seasonId = insertSeason.run(s.id, 1, 'Season 1').lastInsertRowid;
+        insertEpisode.run(s.id, seasonId, 1, 'Pilot', '/videos/s1e1.mp4', 2400);
+        insertEpisode.run(s.id, seasonId, 2, 'The Awakening', '/videos/s1e2.mp4', 2400);
+        insertEpisode.run(s.id, seasonId, 3, 'Hidden Truths', '/videos/s1e3.mp4', 2400);
+    });
+
+    animeIds.forEach(a => {
+        const seasonId = insertSeason.run(a.id, 1, 'Season 1').lastInsertRowid;
+        insertEpisode.run(a.id, seasonId, 1, 'Beginnings', '/videos/a1e1.mp4', 1440);
+        insertEpisode.run(a.id, seasonId, 2, 'Power Up', '/videos/a1e2.mp4', 1440);
+        insertEpisode.run(a.id, seasonId, 3, 'The Rival', '/videos/a1e3.mp4', 1440);
+    });
+};
+
+createTables();
+seedData();
 
 export default db;

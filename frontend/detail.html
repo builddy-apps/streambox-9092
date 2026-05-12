@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamBox - Details</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd',
+                            400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8',
+                            800: '#1e40af', 900: '#1e3a8a', 950: '#172554'
+                        },
+                        accent: {
+                            50: '#fef2f2', 100: '#fee2e2', 200: '#fecaca', 300: '#fca5a5',
+                            400: '#f87171', 500: '#ef4444', 600: '#dc2626', 700: '#b91c1c',
+                            800: '#991b1b', 900: '#7f1d1d', 950: '#450a0a'
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        @keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes slide-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .animate-fade-in { animation: fade-in 0.4s ease-out forwards; }
+        .animate-scale-in { animation: scale-in 0.2s ease-out forwards; }
+        .animate-slide-up { animation: slide-up 0.3s ease-out forwards; }
+        
+        [data-focusable] {
+            outline: none;
+            transition: all 0.2s ease-out;
+        }
+        .dpad-focused {
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3);
+            transform: scale(1.05);
+            z-index: 10;
+        }
+        .dark .dpad-focused {
+            box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.5), 0 0 20px rgba(96, 165, 250, 0.3);
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            border: 4px solid rgba(59, 130, 246, 0.2);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        .dark .spinner {
+            border-color: rgba(96, 165, 250, 0.2);
+            border-top-color: #60a5fa;
+        }
+        
+        body { transition: background-color 0.3s ease, color 0.3s ease; }
+        
+        /* Quality badge colors */
+        .quality-4k { background: linear-gradient(135deg, #10b981, #059669); }
+        .quality-hd { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .quality-sd { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        
+        /* Backdrop gradient overlay */
+        .backdrop-overlay {
+            background: linear-gradient(to top, #000000 0%, rgba(0,0,0,0.8) 30%, rgba(0,0,0,0.4) 60%, rgba(0,0,0,0.2) 100%);
+        }
+        .dark .backdrop-overlay {
+            background: linear-gradient(to top, #000000 0%, rgba(0,0,0,0.9) 30%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0.4) 100%);
+        }
+        
+        /* Episode list scroll */
+        .episode-scroll::-webkit-scrollbar { height: 8px; }
+        .episode-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 4px; }
+        .episode-scroll::-webkit-scrollbar-thumb { background: rgba(59, 130, 246, 0.5); border-radius: 4px; }
+        .dark .episode-scroll::-webkit-scrollbar-thumb { background: rgba(96, 165, 250, 0.5); }
+        
+        /* Rating star colors */
+        .star-filled { color: #fbbf24; }
+        .star-empty { color: #4b5563; }
+        .dark .star-empty { color: #6b7280; }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-50 dark:bg-black text-slate-900 dark:text-white transition-colors duration-300">
+    <!-- Header -->
+    <header class="fixed top-0 left-0 right-0 z-50 bg-white/90 dark:bg-black/90 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16 sm:h-20">
+                <!-- Logo -->
+                <div class="flex items-center gap-3">
+                    <button onclick="window.location.href='/home.html'" class="flex items-center gap-2 group" data-focusable>
+                        <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-lg group-hover:shadow-primary-500/30 transition-shadow">
+                            <svg class="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                        <span class="text-xl sm:text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-primary-400 dark:to-primary-600 bg-clip-text text-transparent">StreamBox</span>
+                    </button>
+                </div>
+
+                <!-- Navigation -->
+                <nav class="flex items-center gap-1 sm:gap-2">
+                    <a href="/home.html" class="px-4 py-2 sm:px-5 sm:py-2.5 text-base sm:text-lg font-medium rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-primary-600 dark:hover:text-primary-400 transition-all" data-focusable>Home</a>
+                    <a href="/search.html" class="px-4 py-2 sm:px-5 sm:py-2.5 text-base sm:text-lg font-medium rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-primary-600 dark:hover:text-primary-400 transition-all" data-focusable>Search</a>
+                    <a href="/library.html" class="px-4 py-2 sm:px-5 sm:py-2.5 text-base sm:text-lg font-medium rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-primary-600 dark:hover:text-primary-400 transition-all" data-focusable>Library</a>
+                </nav>
+
+                <!-- Right side actions -->
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <button onclick="toggleDarkMode()" class="p-2.5 sm:p-3 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900 transition-all" data-focusable aria-label="Toggle dark mode">
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                        </svg>
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6 dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="pt-16 sm:pt-20">
+        <!-- Loading State -->
+        <div id="loading-state" class="flex flex-col items-center justify-center min-h-[60vh]">
+            <div class="spinner w-16 h-16"></div>
+            <p class="mt-4 text-lg text-slate-500 dark:text-slate-400">Loading content...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="error-state" class="hidden flex flex-col items-center justify-center min-h-[60vh] px-4">
+            <svg class="w-24 h-24 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <h2 class="mt-4 text-2xl font-bold text-slate-900 dark:text-white">Content Not Found</h2>
+            <p class="mt-2 text-slate-500 dark:text-slate-400">The content you're looking for doesn't exist or has been removed.</p>
+            <button onclick="window.location.href='/home.html'" class="mt-6 px-8 py-3 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition-all" data-focusable>Go Back Home</button>
+        </div>
+
+        <!-- Content Detail -->
+        <div id="content-detail" class="hidden">
+            <!-- Backdrop -->
+            <div class="relative h-[50vh] sm:h-[60vh] overflow-hidden">
+                <img id="backdrop-image" src="" alt="" class="absolute inset-0 w-full h-full object-cover">
+                <div class="absolute inset-0 backdrop-overlay"></div>
+            </div>
+
+            <!-- Content Info -->
+            <div class="relative -mt-32 sm:-mt-40 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+                <div class="flex flex-col lg:flex-row gap-8 animate-fade-in">
+                    <!-- Poster -->
+                    <div class="flex-shrink-0 mx-auto lg:mx-0">
+                        <img id="poster-image" src="" alt="" class="w-48 sm:w-56 lg:w-64 rounded-2xl shadow-2xl border-4 border-white/10 dark:border-black/20">
+                    </div>
+
+                    <!-- Info -->
+                    <div class="flex-1 text-center lg:text-left">
+                        <!-- Title and Badge -->
+                        <div class="flex flex-col sm:flex-row items-center gap-4 mb-4">
+                            <h1 id="content-title" class="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 dark:text-white"></h1>
+                            <span id="quality-badge" class="px-4 py-1 rounded-full text-sm font-bold text-white uppercase tracking-wider"></span>
+                        </div>
+
+                        <!-- Metadata -->
+                        <div class="flex flex-wrap items-center justify-center lg:justify-start gap-4 mb-4">
+                            <span id="content-year" class="text-lg text-slate-600 dark:text-slate-300"></span>
+                            <span class="text-slate-400">•</span>
+                            <span id="content-duration" class="text-lg text-slate-600 dark:text-slate-300"></span>
+                            <span class="text-slate-400">•</span>
+                            <div id="rating-stars" class="flex items-center gap-1"></div>
+                            <span id="rating-text" class="text-lg text-slate-600 dark:text-slate-300"></span>
+                        </div>
+
+                        <!-- Genres -->
+                        <div id="genres-container" class="flex flex-wrap gap-2 justify-center lg:justify-start mb-6"></div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex flex-wrap items-center justify-center lg:justify-start gap-3 mb-6">
+                            <button id="play-btn" onclick="playContent()" class="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white font-bold rounded-xl shadow-lg hover:shadow-primary-600/40 transition-all transform hover:scale-105 active:scale-95" data-focusable>
+                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z"/>
+                                </svg>
+                                Play
+                            </button>
+                            <button id="favorite-btn" onclick="toggleFavorite()" class="flex items-center gap-2 px-6 py-4 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium rounded-xl transition-all" data-focusable>
+                                <svg id="favorite-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                                </svg>
+                                <span id="favorite-text">Add to Favorites</span>
+                            </button>
+                            <button id="subtitle-btn" onclick="toggleSubtitles()" class="flex items-center gap-2 px-4 py-4 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium rounded-xl transition-all" data-focusable>
+                                <svg id="subtitle-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Description -->
+                        <p id="content-description" class="text-lg text-slate-600 dark:text-slate-300 leading-relaxed mb-8"></p>
+                    </div>
+                </div>
+
+                <!-- Seasons and Episodes (for series) -->
+                <div id="seasons-container" class="hidden mt-12 animate-slide-up">
+                    <h2 class="text-2xl font-bold text-slate-900 dark:text-white mb-6">Episodes</h2>
+                    
+                    <!-- Season Tabs -->
+                    <div id="season-tabs" class="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide"></div>
+                    
+                    <!-- Episode List -->
+                    <div id="episode-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-black/50 backdrop-blur-sm mt-auto">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <p class="text-sm text-slate-500 dark:text-slate-400">© 2024 StreamBox. Premium streaming optimized for TV.</p>
+                <div class="flex items-center gap-4">
+                    <a href="#" class="text-sm text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Privacy</a>
+                    <a href="#" class="text-sm text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Terms</a>
+                    <a href="#" class="text-sm text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Help</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="/app.js"></script>
+    <script src="/auth-client.js"></script>
+    <script>
+        let contentData = null;
+        let selectedSeason = null;
+        let selectedEpisode = null;
+        let isFavorite = false;
+        let subtitlesEnabled = localStorage.getItem('subtitlesEnabled') === 'true';
+
+        // Toggle dark mode
+        function toggleDarkMode() {
+            if (window.StreamBox && window.StreamBox.DarkMode) {
+                window.StreamBox.DarkMode.toggle();
+            }
+        }
+
+        // Generate rating stars
+        function generateStars(rating) {
+            const stars = Math.round(rating / 2);
+            let html = '';
+            for (let i = 0; i < 5; i++) {
+                if (i < stars) {
+                    html += '<svg class="w-5 h-5 star-filled" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>';
+                } else {
+                    html += '<svg class="w-5 h-5 star-empty" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>';
+                }
+            }
+            return html;
+        }
+
+        // Load content details
+        async function loadContent() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const contentId = urlParams.get('id');
+
+            if (!contentId) {
+                showError();
+                return;
+            }
+
+            try {
+                const response = await window.StreamBox.API.get(`/api/content/${contentId}`);
+                
+                if (response.success && response.data) {
+                    contentData = response.data;
+                    renderContent();
+                    await checkFavorite();
+                    updateSubtitleButton();
+                    initDPadNav();
+                } else {
+                    showError();
+                }
+            } catch (error) {
+                console.error('Error loading content:', error);
+                showError();
+            }
+        }
+
+        // Render content
+        function renderContent() {
+            document.getElementById('loading-state').classList.add('hidden');
+            document.getElementById('content-detail').classList.remove('hidden');
+
+            const content = contentData;
+
+            // Images
+            document.getElementById('backdrop-image').src = content.backdrop_url || content.poster_url || '';
+            document.getElementById('poster-image').src = content.poster_url || '';
+            document.getElementById('poster-image').alt = content.title;
+
+            // Title
+            document.getElementById('content-title').textContent = content.title;
+
+            // Quality badge
+            const qualityBadge = document.getElementById('quality-badge');
+            qualityBadge.textContent = content.quality || 'HD';
+            qualityBadge.className = 'px-4 py-1 rounded-full text-sm font-bold text-white uppercase tracking-wider ';
+            qualityBadge.classList.add(`quality-${(content.quality || 'HD').toLowerCase()}`);
+
+            // Metadata
+            document.getElementById('content-year').textContent = content.year || 'N/A';
+            
+            const duration = content.duration;
+            const hours = Math.floor(duration / 60);
+            const mins = duration % 60;
+            document.getElementById('content-duration').textContent = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+
+            // Rating
+            document.getElementById('rating-stars').innerHTML = generateStars(content.rating || 0);
+            document.getElementById('rating-text').textContent = `${(content.rating || 0).toFixed(1)}/10`;
+
+            // Genres
+            const genres = content.genres ? content.genres.split(',').map(g => g.trim()) : [];
+            const genresContainer = document.getElementById('genres-container');
+            genresContainer.innerHTML = genres.map(genre => 
+                `<span class="px-3 py-1 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full text-sm font-medium">${genre}</span>`
+            ).join('');
+
+            // Description
+            document.getElementById('content-description').textContent = content.description || 'No description available.';
+
+            // Seasons/Episodes for series
+            if (content.type === 'series' || content.type === 'anime') {
+                renderSeasons();
+            }
+        }
+
+        // Render seasons and episodes
+        function renderSeasons() {
+            const seasonsContainer = document.getElementById('seasons-container');
+            const seasonTabs = document.getElementById('season-tabs');
+            const episodeList = document.getElementById('episode-list');
+
+            if (!contentData.seasons || contentData.seasons.length === 0) {
+                seasonsContainer.classList.add('hidden');
+                return;
+            }
+
+            seasonsContainer.classList.remove('hidden');
+
+            // Render season tabs
+            seasonTabs.innerHTML = contentData.seasons.map((season, index) => `
+                <button onclick="selectSeason(${season.id})" 
+                    class="season-tab px-6 py-3 rounded-xl font-medium transition-all whitespace-nowrap ${index === 0 ? 'bg-primary-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'}"
+                    data-season-id="${season.id}"
+                    data-focusable>
+                    ${season.title || `Season ${season.season_number}`}
+                </button>
+            `).join('');
+
+            // Select first season by default
+            if (contentData.seasons.length > 0) {
+                selectSeason(contentData.seasons[0].id);
+            }
+        }
+
+        // Select season
+        function selectSeason(seasonId) {
+            selectedSeason = seasonId;
+            
+            // Update tab styles
+            document.querySelectorAll('.season-tab').forEach(tab => {
+                if (parseInt(tab.dataset.seasonId) === seasonId) {
+                    tab.classList.remove('bg-slate-200', 'dark:bg-slate-800', 'text-slate-700', 'dark:text-slate-300');
+                    tab.classList.add('bg-primary-600', 'text-white');
+                } else {
+                    tab.classList.add('bg-slate-200', 'dark:bg-slate-800', 'text-slate-700', 'dark:text-slate-300');
+                    tab.classList.remove('bg-primary-600', 'text-white');
+                }
+            });
+
+            // Render episodes
+            const episodes = contentData.episodes.filter(ep => ep.season_id === seasonId);
+            const episodeList = document.getElementById('episode-list');
+            
+            if (episodes.length === 0) {
+                episodeList.innerHTML = '<p class="text-slate-500 dark:text-slate-400 col-span-full">No episodes available for this season.</p>';
+                return;
+            }
+
+            episodeList.innerHTML = episodes.map(ep => `
+                <button onclick="playEpisode(${ep.id})" 
+                    class="episode-card flex items-start gap-4 p-4 bg-slate-100 dark:bg-slate-900 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-all text-left"
+                    data-episode-id="${ep.id}"
+                    data-focusable>
+                    <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-primary-600 flex items-center justify-center text-white font-bold text-lg">
+                        ${ep.episode_number}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="font-semibold text-slate-900 dark:text-white truncate">${ep.title || `Episode ${ep.episode_number}`}</h3>
+                        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            ${ep.duration ? `${Math.floor(ep.duration / 60)}m` : ''}
+                        </p>
+                    </div>
+                    <svg class="w-6 h-6 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            `).join('');
+        }
+
+        // Check if content is in favorites
+        async function checkFavorite() {
+            try {
+                const response = await window.StreamBox.API.get('/api/user/favorites');
+                if (response.success && response.data) {
+                    isFavorite = response.data.some(fav => fav.content_id === contentData.id);
+                    updateFavoriteButton();
+                }
+            } catch (error) {
+                // Not logged in or error, keep as not favorite
+            }
+        }
+
+        // Toggle favorite
+        async function toggleFavorite() {
+            const btn = document.getElementById('favorite-btn');
+            btn.disabled = true;
+
+            try {
+                if (isFavorite) {
+                    await window.StreamBox.API.delete(`/api/user/favorites/${contentData.id}`);
+                    isFavorite = false;
+                    window.StreamBox.Toast.show('Removed from favorites', 'info');
+                } else {
+                    await window.StreamBox.API.post('/api/user/favorites', { content_id: contentData.id });
+                    isFavorite = true;
+                    window.StreamBox.Toast.show('Added to favorites', 'success');
+                }
+                updateFavoriteButton();
+            } catch (error) {
+                window.StreamBox.Toast.show('Failed to update favorites', 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // Update favorite button
+        function updateFavoriteButton() {
+            const icon = document.getElementById('favorite-icon');
+            const text = document.getElementById('favorite-text');
+
+            if (isFavorite) {
+                icon.setAttribute('fill', 'currentColor');
+                icon.classList.remove('text-slate-400');
+                icon.classList.add('text-red-500');
+                text.textContent = 'Remove from Favorites';
+            } else {
+                icon.setAttribute('fill', 'none');
+                icon.classList.add('text-slate-400');
+                icon.classList.remove('text-red-500');
+                text.textContent = 'Add to Favorites';
+            }
+        }
+
+        // Toggle subtitles
+        function toggleSubtitles() {
+            subtitlesEnabled = !subtitlesEnabled;
+            localStorage.setItem('subtitlesEnabled', subtitlesEnabled.toString());
+            updateSubtitleButton();
+            window.StreamBox.Toast.show(`Subtitles ${subtitlesEnabled ? 'enabled' : 'disabled'}`, 'info');
+        }
+
+        // Update subtitle button
+        function updateSubtitleButton() {
+            const icon = document.getElementById('subtitle-icon');
+            const btn = document.getElementById('subtitle-btn');
+
+            if (subtitlesEnabled) {
+                icon.setAttribute('fill', 'currentColor');
+                btn.classList.add('bg-primary-600', 'text-white');
+                btn.classList.remove('bg-slate-200', 'dark:bg-slate-800', 'text-slate-700', 'dark:text-slate-200');
+            } else {
+                icon.setAttribute('fill', 'none');
+                btn.classList.remove('bg-primary-600', 'text-white');
+                btn.classList.add('bg-slate-200', 'dark:bg-slate-800', 'text-slate-700', 'dark:text-slate-200');
+            }
+        }
+
+        // Play content (movie or default episode)
+        function playContent() {
+            if (contentData.type === 'movie') {
+                window.location.href = `/player.html?id=${contentData.id}&type=movie`;
+            } else if (contentData.type === 'series' || contentData.type === 'anime') {
+                // Play first episode of first season
+                if (contentData.seasons && contentData.seasons.length > 0) {
+                    const firstSeason = contentData.seasons[0];
+                    const firstEpisode = contentData.episodes.find(ep => ep.season_id === firstSeason.id);
+                    if (firstEpisode) {
+                        playEpisode(firstEpisode.id);
+                    }
+                }
+            }
+        }
+
+        // Play specific episode
+        function playEpisode(episodeId) {
+            window.location.href = `/player.html?id=${contentData.id}&episode=${episodeId}&type=episode&subs=${subtitlesEnabled}`;
+        }
+
+        // Show error state
+        function showError() {
+            document.getElementById('loading-state').classList.add('hidden');
+            document.getElementById('error-state').classList.remove('hidden');
+        }
+
+        // Initialize D-pad navigation
+        function initDPadNav() {
+            const focusables = document.querySelectorAll('[data-focusable]');
+            if (focusables.length > 0) {
+                window.StreamBox.DPadNav.updateFocusable(document.body, '[data-focusable]');
+                window.StreamBox.DPadNav.focus(0);
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            loadContent();
+        });
+    </script>
+</body>
+</html>

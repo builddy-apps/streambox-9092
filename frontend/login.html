@@ -1,600 +1,447 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>StreamBox - Login</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            primary: {
-              50: '#fef2f2',
-              100: '#fee2e2',
-              200: '#fecaca',
-              300: '#fca5a5',
-              400: '#f87171',
-              500: '#ef4444',
-              600: '#dc2626',
-              700: '#b91c1c',
-              800: '#991b1b',
-              900: '#7f1d1d',
-              950: '#450a0a',
-            },
-            accent: {
-              50: '#f0fdf4',
-              100: '#dcfce7',
-              200: '#bbf7d0',
-              300: '#86efac',
-              400: '#4ade80',
-              500: '#22c55e',
-              600: '#16a34a',
-              700: '#15803d',
-              800: '#166534',
-              900: '#14532d',
-              950: '#052e16',
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamBox - Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            200: '#bfdbfe',
+                            300: '#93c5fd',
+                            400: '#60a5fa',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            800: '#1e40af',
+                            900: '#1e3a8a',
+                            950: '#172554'
+                        },
+                        accent: {
+                            50: '#fef2f2',
+                            100: '#fee2e2',
+                            200: '#fecaca',
+                            300: '#fca5a5',
+                            400: '#f87171',
+                            500: '#ef4444',
+                            600: '#dc2626',
+                            700: '#b91c1c',
+                            800: '#991b1b',
+                            900: '#7f1d1d',
+                            950: '#450a0a'
+                        }
+                    }
+                }
             }
-          }
+        };
+    </script>
+    <style>
+        @keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes slide-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .animate-fade-in { animation: fade-in 0.4s ease-out forwards; }
+        .animate-scale-in { animation: scale-in 0.2s ease-out forwards; }
+        .animate-slide-up { animation: slide-up 0.3s ease-out forwards; }
+        
+        [data-focusable] {
+            outline: none;
+            transition: all 0.2s ease-out;
         }
-      }
-    }
-  </script>
-  <style>
-    @keyframes fade-in {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    @keyframes scale-in {
-      from { transform: scale(0.95); opacity: 0; }
-      to { transform: scale(1); opacity: 1; }
-    }
-    @keyframes slide-up {
-      from { transform: translateY(20px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-    @keyframes shake {
-      0%, 100% { transform: translateX(0); }
-      25% { transform: translateX(-10px); }
-      75% { transform: translateX(10px); }
-    }
-    .animate-fade-in { animation: fade-in 0.5s ease-out; }
-    .animate-scale-in { animation: scale-in 0.3s ease-out; }
-    .animate-slide-up { animation: slide-up 0.4s ease-out; }
-    .animate-shake { animation: shake 0.3s ease-in-out; }
-    
-    /* D-pad focus indicators */
-    *:focus-visible {
-      outline: none;
-      box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.5), 0 0 0 6px rgba(220, 38, 38, 0.2);
-    }
-    
-    /* TV-optimized large tap targets */
-    .tv-focusable {
-      min-height: 48px;
-      min-width: 48px;
-    }
-    
-    /* AMOLED pure black background */
-    .amoled-black {
-      background-color: #000000;
-    }
-  </style>
+        .dpad-focused {
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3);
+            transform: scale(1.02);
+            z-index: 10;
+        }
+        .dark .dpad-focused {
+            box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.5), 0 0 20px rgba(96, 165, 250, 0.3);
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            border: 3px solid currentColor;
+            border-opacity: 0.2;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+    </style>
 </head>
-<body class="amoled-black min-h-screen flex flex-col text-white antialiased">
-  <!-- Header -->
-  <header class="border-b border-gray-800/50 backdrop-blur-sm sticky top-0 z-50 bg-black/80">
-    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-600 to-primary-800 flex items-center justify-center shadow-lg">
-          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-          </svg>
-        </div>
-        <h1 class="text-2xl font-bold tracking-tight">StreamBox</h1>
-      </div>
-      <button id="darkModeToggle" class="tv-focusable p-3 rounded-xl bg-gray-800/50 hover:bg-gray-700/50 transition-all duration-200 focus:ring-2 focus:ring-primary-500" aria-label="Toggle dark mode">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
-        </svg>
-      </button>
-    </div>
-  </header>
-
-  <!-- Main Content -->
-  <main class="flex-1 flex items-center justify-center p-6">
-    <div class="w-full max-w-md animate-scale-in">
-      <!-- Auth Card -->
-      <div class="bg-gray-900/80 backdrop-blur-xl rounded-2xl border border-gray-800 shadow-2xl overflow-hidden">
-        <!-- Tab Navigation -->
-        <div class="flex border-b border-gray-800">
-          <button id="loginTab" class="tv-focusable flex-1 py-4 text-lg font-semibold transition-all duration-200 bg-primary-600 text-white" data-tab="login">
-            Accedi
-          </button>
-          <button id="registerTab" class="tv-focusable flex-1 py-4 text-lg font-semibold transition-all duration-200 text-gray-400 hover:text-white hover:bg-gray-800/50" data-tab="register">
-            Registrati
-          </button>
-        </div>
-
-        <!-- Error Message Container -->
-        <div id="errorContainer" class="hidden mx-6 mt-4 p-4 rounded-xl bg-red-900/30 border border-red-800/50 text-red-200 animate-shake">
-          <div class="flex items-start gap-3">
-            <svg class="w-5 h-5 mt-0.5 flex-shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-            <p id="errorMessage" class="text-sm"></p>
-            <button id="dismissError" class="ml-auto flex-shrink-0 text-red-400 hover:text-red-300 transition-colors">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
+<body class="min-h-screen bg-slate-50 dark:bg-black text-slate-900 dark:text-white transition-colors duration-300">
+    <!-- Header -->
+    <header class="fixed top-0 left-0 right-0 z-40 bg-white/90 dark:bg-black/90 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800">
+        <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+            <h1 class="text-2xl font-bold bg-gradient-to-r from-primary-500 to-accent-500 bg-clip-text text-transparent">
+                StreamBox
+            </h1>
+            <button 
+                id="darkModeToggle" 
+                data-focusable="true"
+                type="button"
+                class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 focus:ring-2 focus:ring-primary-500"
+                aria-label="Toggle dark mode">
+                <svg id="sunIcon" class="w-6 h-6 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                </svg>
+                <svg id="moonIcon" class="w-6 h-6 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                </svg>
             </button>
-          </div>
         </div>
+    </header>
 
-        <!-- Success Message Container -->
-        <div id="successContainer" class="hidden mx-6 mt-4 p-4 rounded-xl bg-green-900/30 border border-green-800/50 text-green-200 animate-slide-up">
-          <div class="flex items-start gap-3">
-            <svg class="w-5 h-5 mt-0.5 flex-shrink-0 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-            <p id="successMessage" class="text-sm"></p>
-          </div>
+    <!-- Main Content -->
+    <main class="min-h-screen flex items-center justify-center px-6 pt-20">
+        <div class="w-full max-w-md animate-slide-up">
+            <!-- Logo/Brand -->
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 mb-4 shadow-lg">
+                    <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <h2 class="text-3xl font-bold text-slate-900 dark:text-white" id="formTitle">Welcome Back</h2>
+                <p class="text-slate-600 dark:text-slate-400 mt-2 text-lg" id="formSubtitle">Sign in to continue watching</p>
+            </div>
+
+            <!-- Error Message -->
+            <div id="errorMessage" class="hidden mb-6 p-4 bg-accent-100 dark:bg-accent-900/30 border border-accent-300 dark:border-accent-700 rounded-xl flex items-center gap-3 animate-fade-in">
+                <svg class="w-6 h-6 text-accent-600 dark:text-accent-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span id="errorText" class="text-accent-800 dark:text-accent-200"></span>
+                <button type="button" id="dismissError" class="ml-auto text-accent-600 dark:text-accent-400 hover:text-accent-800 dark:hover:text-accent-200">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Auth Form -->
+            <form id="authForm" class="space-y-6">
+                <!-- Name Field (Signup only) -->
+                <div id="nameField" class="hidden">
+                    <label for="name" class="block text-lg font-medium text-slate-700 dark:text-slate-300 mb-2">Name</label>
+                    <input 
+                        type="text" 
+                        id="name" 
+                        name="name"
+                        data-focusable="true"
+                        class="w-full px-6 py-4 text-lg bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl focus:border-primary-500 dark:focus:border-primary-400 focus:ring-4 focus:ring-primary-500/20 transition-all duration-200 text-slate-900 dark:text-white placeholder-slate-400"
+                        placeholder="Enter your name"
+                        autocomplete="name">
+                </div>
+
+                <!-- Email Field -->
+                <div>
+                    <label for="email" class="block text-lg font-medium text-slate-700 dark:text-slate-300 mb-2">Email</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email"
+                        data-focusable="true"
+                        class="w-full px-6 py-4 text-lg bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl focus:border-primary-500 dark:focus:border-primary-400 focus:ring-4 focus:ring-primary-500/20 transition-all duration-200 text-slate-900 dark:text-white placeholder-slate-400"
+                        placeholder="Enter your email"
+                        autocomplete="email">
+                </div>
+
+                <!-- Password Field -->
+                <div>
+                    <label for="password" class="block text-lg font-medium text-slate-700 dark:text-slate-300 mb-2">Password</label>
+                    <div class="relative">
+                        <input 
+                            type="password" 
+                            id="password" 
+                            name="password"
+                            data-focusable="true"
+                            class="w-full px-6 py-4 pr-14 text-lg bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl focus:border-primary-500 dark:focus:border-primary-400 focus:ring-4 focus:ring-primary-500/20 transition-all duration-200 text-slate-900 dark:text-white placeholder-slate-400"
+                            placeholder="Enter your password"
+                            autocomplete="current-password">
+                        <button 
+                            type="button" 
+                            id="togglePassword"
+                            data-focusable="true"
+                            class="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                            aria-label="Toggle password visibility">
+                            <svg id="eyeOpen" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                            </svg>
+                            <svg id="eyeClosed" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Remember Me -->
+                <div class="flex items-center">
+                    <input 
+                        type="checkbox" 
+                        id="remember" 
+                        name="remember"
+                        data-focusable="true"
+                        class="w-6 h-6 rounded border-slate-300 dark:border-slate-700 text-primary-600 focus:ring-primary-500 bg-white dark:bg-slate-900 cursor-pointer">
+                    <label for="remember" class="ml-3 text-lg text-slate-700 dark:text-slate-300 cursor-pointer">Remember me</label>
+                </div>
+
+                <!-- Submit Button -->
+                <button 
+                    type="submit" 
+                    id="submitBtn"
+                    data-focusable="true"
+                    class="w-full py-4 px-6 text-lg font-semibold text-white bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 focus:ring-4 focus:ring-primary-500/50 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
+                    <span id="submitText">Sign In</span>
+                    <div id="submitSpinner" class="w-6 h-6 spinner hidden"></div>
+                    <svg id="submitArrow" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                    </svg>
+                </button>
+            </form>
+
+            <!-- Toggle Mode -->
+            <div class="mt-8 text-center">
+                <p class="text-lg text-slate-600 dark:text-slate-400">
+                    <span id="toggleText">Don't have an account?</span>
+                    <button 
+                        type="button" 
+                        id="toggleMode"
+                        data-focusable="true"
+                        class="ml-2 text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-semibold transition-colors focus:underline underline-offset-4">
+                        Sign Up
+                    </button>
+                </p>
+            </div>
+
+            <!-- Back Button (for TV) -->
+            <div class="mt-6 text-center">
+                <button 
+                    type="button" 
+                    id="backBtn"
+                    data-focusable="true"
+                    class="inline-flex items-center gap-2 px-6 py-3 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    <span class="text-lg">Back</span>
+                </button>
+            </div>
         </div>
+    </main>
 
-        <!-- Login Form -->
-        <form id="loginForm" class="p-6 space-y-6 animate-fade-in">
-          <div class="space-y-2">
-            <label for="loginEmail" class="block text-sm font-medium text-gray-300">Email</label>
-            <div class="relative">
-              <input type="email" id="loginEmail" name="email" required
-                class="tv-focusable w-full px-5 py-4 text-lg bg-gray-800/50 border-2 border-gray-700 rounded-xl text-white placeholder-gray-500 transition-all duration-200 focus:border-primary-500 focus:bg-gray-800"
-                placeholder="La tua email">
-              <svg class="absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"/>
-              </svg>
-            </div>
-          </div>
+    <!-- Load App Scripts -->
+    <script src="app.js"></script>
+    <script src="auth-client.js"></script>
 
-          <div class="space-y-2">
-            <label for="loginPassword" class="block text-sm font-medium text-gray-300">Password</label>
-            <div class="relative">
-              <input type="password" id="loginPassword" name="password" required
-                class="tv-focusable w-full px-5 py-4 text-lg bg-gray-800/50 border-2 border-gray-700 rounded-xl text-white placeholder-gray-500 transition-all duration-200 focus:border-primary-500 focus:bg-gray800"
-                placeholder="La tua password">
-              <button type="button" id="toggleLoginPassword" class="tv-focusable absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors" aria-label="Toggle password visibility">
-                <svg class="w-6 h-6 eye-open" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                </svg>
-                <svg class="w-6 h-6 eye-closed hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/>
-                </svg>
-              </button>
-            </div>
-          </div>
+    <script>
+        // Login Page Logic
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('authForm');
+            const submitBtn = document.getElementById('submitBtn');
+            const submitText = document.getElementById('submitText');
+            const submitSpinner = document.getElementById('submitSpinner');
+            const submitArrow = document.getElementById('submitArrow');
+            const darkModeToggle = document.getElementById('darkModeToggle');
+            const togglePassword = document.getElementById('togglePassword');
+            const passwordInput = document.getElementById('password');
+            const eyeOpen = document.getElementById('eyeOpen');
+            const eyeClosed = document.getElementById('eyeClosed');
+            const toggleModeBtn = document.getElementById('toggleMode');
+            const formTitle = document.getElementById('formTitle');
+            const formSubtitle = document.getElementById('formSubtitle');
+            const toggleText = document.getElementById('toggleText');
+            const nameField = document.getElementById('nameField');
+            const nameInput = document.getElementById('name');
+            const errorMessage = document.getElementById('errorMessage');
+            const errorText = document.getElementById('errorText');
+            const dismissError = document.getElementById('dismissError');
+            const backBtn = document.getElementById('backBtn');
 
-          <div class="flex items-center">
-            <input type="checkbox" id="rememberMe" name="remember"
-              class="tv-focusable w-5 h-5 rounded border-gray-600 bg-gray-800 text-primary-600 focus:ring-primary-500 focus:ring-offset-0">
-            <label for="rememberMe" class="ml-3 text-sm text-gray-300 cursor-pointer">Ricordami</label>
-          </div>
+            let isLoginMode = true;
 
-          <button type="submit" id="loginSubmit" class="tv-focusable w-full py-4 px-6 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-500 hover:to-primary-600 text-white text-lg font-semibold rounded-xl shadow-lg shadow-primary-900/30 transition-all duration-200 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
-            <span id="loginBtnText">Accedi</span>
-            <svg id="loginSpinner" class="hidden animate-spin w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          </button>
-        </form>
+            // Initialize D-pad navigation
+            setTimeout(() => {
+                const focusables = document.querySelectorAll('[data-focusable]');
+                focusables.forEach((el, index) => {
+                    el.addEventListener('focus', () => {
+                        el.classList.add('dpad-focused');
+                    });
+                    el.addEventListener('blur', () => {
+                        el.classList.remove('dpad-focused');
+                    });
+                });
+                if (focusables.length > 0) {
+                    focusables[0].focus();
+                }
+            }, 100);
 
-        <!-- Register Form -->
-        <form id="registerForm" class="p-6 space-y-6 hidden animate-fade-in">
-          <div class="space-y-2">
-            <label for="registerEmail" class="block text-sm font-medium text-gray-300">Email</label>
-            <div class="relative">
-              <input type="email" id="registerEmail" name="email" required
-                class="tv-focusable w-full px-5 py-4 text-lg bg-gray-800/50 border-2 border-gray-700 rounded-xl text-white placeholder-gray-500 transition-all duration-200 focus:border-primary-500 focus:bg-gray-800"
-                placeholder="La tua email">
-              <svg class="absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"/>
-              </svg>
-            </div>
-          </div>
+            // Dark mode toggle
+            darkModeToggle.addEventListener('click', () => {
+                if (window.StreamBox && window.StreamBox.DarkMode) {
+                    window.StreamBox.DarkMode.toggle();
+                }
+            });
 
-          <div class="space-y-2">
-            <label for="registerPassword" class="block text-sm font-medium text-gray-300">Password</label>
-            <div class="relative">
-              <input type="password" id="registerPassword" name="password" required minlength="6"
-                class="tv-focusable w-full px-5 py-4 text-lg bg-gray-800/50 border-2 border-gray-700 rounded-xl text-white placeholder-gray-500 transition-all duration-200 focus:border-primary-500 focus:bg-gray-800"
-                placeholder="Minimo 6 caratteri">
-              <button type="button" id="toggleRegisterPassword" class="tv-focusable absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors" aria-label="Toggle password visibility">
-                <svg class="w-6 h-6 eye-open" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                </svg>
-                <svg class="w-6 h-6 eye-closed hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/>
-                </svg>
-              </button>
-            </div>
-            <p class="text-xs text-gray-500 mt-1">La password deve contenere almeno 6 caratteri</p>
-          </div>
+            // Form submission
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const email = document.getElementById('email').value.trim();
+                const password = passwordInput.value;
+                const name = nameInput.value.trim();
+                const remember = document.getElementById('remember').checked;
 
-          <div class="space-y-2">
-            <label for="confirmPassword" class="block text-sm font-medium text-gray-300">Conferma Password</label>
-            <div class="relative">
-              <input type="password" id="confirmPassword" name="confirmPassword" required
-                class="tv-focusable w-full px-5 py-4 text-lg bg-gray-800/50 border-2 border-gray-700 rounded-xl text-white placeholder-gray-500 transition-all duration-200 focus:border-primary-500 focus:bg-gray-800"
-                placeholder="Ripeti la password">
-              <button type="button" id="toggleConfirmPassword" class="tv-focusable absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors" aria-label="Toggle password visibility">
-                <svg class="w-6 h-6 eye-open" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                </svg>
-                <svg class="w-6 h-6 eye-closed hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/>
-                </svg>
-              </button>
-            </div>
-          </div>
+                if (!email || !password) {
+                    showError('Please fill in all required fields');
+                    return;
+                }
 
-          <button type="submit" id="registerSubmit" class="tv-focusable w-full py-4 px-6 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-500 hover:to-primary-600 text-white text-lg font-semibold rounded-xl shadow-lg shadow-primary-900/30 transition-all duration-200 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
-            <span id="registerBtnText">Crea Account</span>
-            <svg id="registerSpinner" class="hidden animate-spin w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          </button>
-        </form>
-      </div>
+                if (!isLoginMode && !name) {
+                    showError('Please enter your name');
+                    nameInput.focus();
+                    return;
+                }
 
-      <!-- Footer Info -->
-      <p class="text-center text-gray-500 text-sm mt-6 animate-fade-in">
-        StreamBox Premium - Il tuo hub streaming
-      </p>
-    </div>
-  </main>
+                setLoading(true);
+                hideError();
 
-  <!-- Toast Notification -->
-  <div id="toast" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-300 z-50">
-    <div class="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-4 flex items-center gap-3">
-      <div id="toastIcon" class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"></div>
-      <div>
-        <p id="toastTitle" class="font-semibold text-sm"></p>
-        <p id="toastMessage" class="text-xs text-gray-400"></p>
-      </div>
-    </div>
-  </div>
+                try {
+                    let result;
+                    if (isLoginMode) {
+                        result = await window.StreamBox.Auth.login(email, password);
+                    } else {
+                        result = await window.StreamBox.Auth.register(email, password, name);
+                    }
 
-  <script>
-    // Dark mode management
-    function initDarkMode() {
-      const isDark = localStorage.getItem('darkMode') !== 'false';
-      document.documentElement.classList.toggle('dark', isDark);
-    }
+                    if (result.success) {
+                        if (remember) {
+                            localStorage.setItem('rememberEmail', email);
+                        } else {
+                            localStorage.removeItem('rememberEmail');
+                        }
+                        window.location.href = '/index.html';
+                    } else {
+                        showError(result.error || 'Authentication failed');
+                    }
+                } catch (error) {
+                    showError(error.message || 'An unexpected error occurred');
+                } finally {
+                    setLoading(false);
+                }
+            });
 
-    function toggleDark() {
-      const html = document.documentElement;
-      const isDark = html.classList.toggle('dark');
-      localStorage.setItem('darkMode', isDark);
-    }
+            // Toggle password visibility
+            togglePassword.addEventListener('click', (e) => {
+                e.preventDefault();
+                const type = passwordInput.type === 'password' ? 'text' : 'password';
+                passwordInput.type = type;
+                eyeOpen.classList.toggle('hidden');
+                eyeClosed.classList.toggle('hidden');
+                passwordInput.focus();
+            });
 
-    // Password visibility toggle
-    function setupPasswordToggle(buttonId, inputId) {
-      const button = document.getElementById(buttonId);
-      const input = document.getElementById(inputId);
-      const eyeOpen = button.querySelector('.eye-open');
-      const eyeClosed = button.querySelector('.eye-closed');
+            // Toggle between login and signup
+            toggleModeBtn.addEventListener('click', () => {
+                isLoginMode = !isLoginMode;
+                
+                if (isLoginMode) {
+                    formTitle.textContent = 'Welcome Back';
+                    formSubtitle.textContent = 'Sign in to continue watching';
+                    toggleText.textContent = "Don't have an account?";
+                    toggleModeBtn.textContent = 'Sign Up';
+                    submitText.textContent = 'Sign In';
+                    nameField.classList.add('hidden');
+                    nameInput.removeAttribute('required');
+                } else {
+                    formTitle.textContent = 'Create Account';
+                    formSubtitle.textContent = 'Start your streaming journey';
+                    toggleText.textContent = 'Already have an account?';
+                    toggleModeBtn.textContent = 'Sign In';
+                    submitText.textContent = 'Sign Up';
+                    nameField.classList.remove('hidden');
+                    nameInput.setAttribute('required', 'true');
+                    nameInput.focus();
+                }
 
-      button.addEventListener('click', () => {
-        const isPassword = input.type === 'password';
-        input.type = isPassword ? 'text' : 'password';
-        eyeOpen.classList.toggle('hidden', !isPassword);
-        eyeClosed.classList.toggle('hidden', isPassword);
-      });
-    }
+                hideError();
+                window.StreamBox.DPadNav.updateFocusable(document.body, '[data-focusable]');
+            });
 
-    // Error message display
-    function showError(message) {
-      const container = document.getElementById('errorContainer');
-      const messageEl = document.getElementById('errorMessage');
-      messageEl.textContent = message;
-      container.classList.remove('hidden');
-      container.classList.remove('animate-shake');
-      void container.offsetWidth;
-      container.classList.add('animate-shake');
-      hideSuccess();
-    }
+            // Dismiss error
+            dismissError.addEventListener('click', () => {
+                hideError();
+            });
 
-    function hideError() {
-      document.getElementById('errorContainer').classList.add('hidden');
-    }
+            // Back button
+            backBtn.addEventListener('click', () => {
+                if (isLoginMode) {
+                    window.history.back();
+                } else {
+                    isLoginMode = true;
+                    formTitle.textContent = 'Welcome Back';
+                    formSubtitle.textContent = 'Sign in to continue watching';
+                    toggleText.textContent = "Don't have an account?";
+                    toggleModeBtn.textContent = 'Sign Up';
+                    submitText.textContent = 'Sign In';
+                    nameField.classList.add('hidden');
+                    nameInput.removeAttribute('required');
+                    hideError();
+                    window.StreamBox.DPadNav.updateFocusable(document.body, '[data-focusable]');
+                }
+            });
 
-    // Success message display
-    function showSuccess(message) {
-      const container = document.getElementById('successContainer');
-      const messageEl = document.getElementById('successMessage');
-      messageEl.textContent = message;
-      container.classList.remove('hidden');
-      hideError();
-    }
+            // Helper functions
+            function setLoading(loading) {
+                submitBtn.disabled = loading;
+                submitText.classList.toggle('hidden', loading);
+                submitSpinner.classList.toggle('hidden', !loading);
+                submitArrow.classList.toggle('hidden', loading);
+            }
 
-    function hideSuccess() {
-      document.getElementById('successContainer').classList.add('hidden');
-    }
+            function showError(message) {
+                errorText.textContent = message;
+                errorMessage.classList.remove('hidden');
+                errorMessage.classList.add('animate-fade-in');
+            }
 
-    // Loading state
-    function setLoading(buttonId, spinnerId, textId, isLoading, defaultText) {
-      const button = document.getElementById(buttonId);
-      const spinner = document.getElementById(spinnerId);
-      const text = document.getElementById(textId);
-      button.disabled = isLoading;
-      spinner.classList.toggle('hidden', !isLoading);
-      text.classList.toggle('hidden', isLoading);
-    }
+            function hideError() {
+                errorMessage.classList.add('hidden');
+            }
 
-    // Toast notification
-    function showToast(type, title, message) {
-      const toast = document.getElementById('toast');
-      const toastIcon = document.getElementById('toastIcon');
-      const toastTitle = document.getElementById('toastTitle');
-      const toastMessage = document.getElementById('toastMessage');
+            // Load remembered email
+            const rememberedEmail = localStorage.getItem('rememberEmail');
+            if (rememberedEmail) {
+                document.getElementById('email').value = rememberedEmail;
+                document.getElementById('remember').checked = true;
+                passwordInput.focus();
+            }
 
-      const icons = {
-        success: { bg: 'bg-green-500', svg: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>' },
-        error: { bg: 'bg-red-500', svg: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>' },
-        info: { bg: 'bg-blue-500', svg: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>' }
-      };
+            // Handle Enter key on inputs
+            const inputs = form.querySelectorAll('input[data-focusable]');
+            inputs.forEach(input => {
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        submitBtn.focus();
+                    }
+                });
+            });
 
-      const icon = icons[type] || icons.info;
-      toastIcon.className = `w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${icon.bg}`;
-      toastIcon.innerHTML = `<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">${icon.svg}</svg>`;
-      toastTitle.textContent = title;
-      toastMessage.textContent = message;
-
-      toast.classList.remove('translate-y-20', 'opacity-0');
-      toast.classList.add('translate-y-0', 'opacity-100');
-
-      setTimeout(() => {
-        toast.classList.add('translate-y-20', 'opacity-0');
-        toast.classList.remove('translate-y-0', 'opacity-100');
-      }, 3000);
-    }
-
-    // Tab switching
-    function setupTabs() {
-      const loginTab = document.getElementById('loginTab');
-      const registerTab = document.getElementById('registerTab');
-      const loginForm = document.getElementById('loginForm');
-      const registerForm = document.getElementById('registerForm');
-
-      function switchTab(tab) {
-        hideError();
-        hideSuccess();
-        
-        if (tab === 'login') {
-          loginTab.classList.add('bg-primary-600', 'text-white');
-          loginTab.classList.remove('text-gray-400', 'hover:text-white', 'hover:bg-gray-800/50');
-          registerTab.classList.remove('bg-primary-600', 'text-white');
-          registerTab.classList.add('text-gray-400', 'hover:text-white', 'hover:bg-gray-800/50');
-          loginForm.classList.remove('hidden');
-          registerForm.classList.add('hidden');
-        } else {
-          registerTab.classList.add('bg-primary-600', 'text-white');
-          registerTab.classList.remove('text-gray-400', 'hover:text-white', 'hover:bg-gray-800/50');
-          loginTab.classList.remove('bg-primary-600', 'text-white');
-          loginTab.classList.add('text-gray-400', 'hover:text-white', 'hover:bg-gray-800/50');
-          registerForm.classList.remove('hidden');
-          loginForm.classList.add('hidden');
-        }
-      }
-
-      loginTab.addEventListener('click', () => switchTab('login'));
-      registerTab.addEventListener('click', () => switchTab('register'));
-    }
-
-    // API helper
-    async function apiCall(endpoint, options = {}) {
-      try {
-        const response = await fetch(endpoint, {
-          headers: {
-            'Content-Type': 'application/json',
-            ...options.headers
-          },
-          ...options
+            // Keyboard shortcuts for TV
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace') {
+                    backBtn.click();
+                }
+            });
         });
-
-        const data = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(data.error || 'Request failed');
-        }
-        
-        return data;
-      } catch (error) {
-        throw error;
-      }
-    }
-
-    // Store auth tokens
-    function storeTokens(accessToken, refreshToken, rememberMe = false) {
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
-      localStorage.setItem('tokenTimestamp', Date.now().toString());
-    }
-
-    // Clear auth tokens
-    function clearTokens() {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('tokenTimestamp');
-    }
-
-    // Handle login
-    async function handleLogin(event) {
-      event.preventDefault();
-      hideError();
-      hideSuccess();
-
-      const formData = new FormData(event.target);
-      const email = formData.get('email').trim();
-      const password = formData.get('password');
-      const remember = formData.get('remember') === 'on';
-
-      setLoading('loginSubmit', 'loginSpinner', 'loginBtnText', true, 'Accedi');
-
-      try {
-        const data = await apiCall('/api/auth/login', {
-          method: 'POST',
-          body: JSON.stringify({ email, password })
-        });
-
-        if (data.success) {
-          storeTokens(data.data.accessToken, data.data.refreshToken, remember);
-          showSuccess('Accesso effettuato con successo!');
-          showToast('success', 'Benvenuto!', 'Accesso effettuato con successo');
-          
-          setTimeout(() => {
-            window.location.href = '/';
-          }, 1000);
-        }
-      } catch (error) {
-        showError(error.message || 'Accesso fallito. Controlla le credenziali.');
-        showToast('error', 'Errore', error.message || 'Accesso fallito');
-      } finally {
-        setLoading('loginSubmit', 'loginSpinner', 'loginBtnText', false, 'Accedi');
-      }
-    }
-
-    // Handle registration
-    async function handleRegister(event) {
-      event.preventDefault();
-      hideError();
-      hideSuccess();
-
-      const formData = new FormData(event.target);
-      const email = formData.get('email').trim();
-      const password = formData.get('password');
-      const confirmPassword = formData.get('confirmPassword');
-
-      // Client-side validation
-      if (password !== confirmPassword) {
-        showError('Le password non coincidono.');
-        return;
-      }
-
-      if (password.length < 6) {
-        showError('La password deve contenere almeno 6 caratteri.');
-        return;
-      }
-
-      setLoading('registerSubmit', 'registerSpinner', 'registerBtnText', true, 'Crea Account');
-
-      try {
-        const data = await apiCall('/api/auth/register', {
-          method: 'POST',
-          body: JSON.stringify({ email, password })
-        });
-
-        if (data.success) {
-          storeTokens(data.data.accessToken, data.data.refreshToken);
-          showSuccess('Account creato con successo!');
-          showToast('success', 'Benvenuto!', 'Account creato con successo');
-          
-          setTimeout(() => {
-            window.location.href = '/';
-          }, 1000);
-        }
-      } catch (error) {
-        showError(error.message || 'Registrazione fallita. L\'email potrebbe essere già in uso.');
-        showToast('error', 'Errore', error.message || 'Registrazione fallita');
-      } finally {
-        setLoading('registerSubmit', 'registerSpinner', 'registerBtnText', false, 'Crea Account');
-      }
-    }
-
-    // D-pad navigation support
-    function setupDPadNavigation() {
-      const focusableElements = document.querySelectorAll('.tv-focusable');
-      focusableElements.forEach((el, index) => {
-        el.dataset.index = index;
-      });
-
-      document.addEventListener('keydown', (e) => {
-        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-          const currentFocus = document.activeElement;
-          if (!currentFocus || !currentFocus.classList.contains('tv-focusable')) {
-            return;
-          }
-
-          e.preventDefault();
-          const currentIndex = parseInt(currentFocus.dataset.index);
-          const elements = Array.from(focusableElements);
-          let nextIndex = currentIndex;
-
-          switch (e.key) {
-            case 'ArrowDown':
-              nextIndex = Math.min(currentIndex + 1, elements.length - 1);
-              break;
-            case 'ArrowUp':
-              nextIndex = Math.max(currentIndex - 1, 0);
-              break;
-            case 'ArrowRight':
-              nextIndex = Math.min(currentIndex + 1, elements.length - 1);
-              break;
-            case 'ArrowLeft':
-              nextIndex = Math.max(currentIndex - 1, 0);
-              break;
-          }
-
-          if (nextIndex !== currentIndex) {
-            elements[nextIndex].focus();
-            elements[nextIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }
-
-        if (e.key === 'Enter' && document.activeElement) {
-          const activeElement = document.activeElement;
-          if (activeElement.tagName === 'INPUT' && activeElement.type !== 'checkbox') {
-            e.preventDefault();
-            return;
-          }
-        }
-      });
-    }
-
-    // Initialize
-    document.addEventListener('DOMContentLoaded', () => {
-      initDarkMode();
-      setupTabs();
-      setupPasswordToggle('toggleLoginPassword', 'loginPassword');
-      setupPasswordToggle('toggleRegisterPassword', 'registerPassword');
-      setupPasswordToggle('toggleConfirmPassword', 'confirmPassword');
-
-      document.getElementById('loginForm').addEventListener('submit', handleLogin);
-      document.getElementById('registerForm').addEventListener('submit', handleRegister);
-      document.getElementById('darkModeToggle').addEventListener('click', toggleDark);
-      document.getElementById('dismissError').addEventListener('click', hideError);
-
-      // Check if already authenticated
-      const token = localStorage.getItem('accessToken');
-      if (token) {
-        fetch('/api/user/me', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }).then(res => {
-          if (res.ok) {
-            window.location.href = '/';
-          }
-        }).catch(() => {});
-      }
-
-      // Enable D-pad navigation for TV
-      setupDPadNavigation();
-    });
-  </script>
+    </script>
 </body>
 </html>

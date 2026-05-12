@@ -1,484 +1,335 @@
 import express from 'express';
 import db from '../db.js';
-import {
-  hashPassword,
-  comparePassword,
-  generateAuthTokens,
-  verifyRefreshToken,
-  deleteRefreshToken,
-  storeRefreshToken,
-  authenticate,
-  rateLimiter
-} from '../auth.js';
+import { hashPassword, verifyPassword, generateAuthTokens, authenticateToken } from '../auth.js';
 
 const router = express.Router();
 
-// Create missing tables needed for auth and user preferences
-db.exec(`
-  CREATE TABLE IF NOT EXISTS refresh_tokens (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    token TEXT NOT NULL UNIQUE,
-    expires_at TEXT NOT NULL,
-    created_at DATETIME DEFAULT (datetime('now')),
-    deleted_at TEXT,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-  );
-`);
+// POST /api/auth/register
+router.post('/auth/register', async (req, res) => {
+    try {
+        const { email, password, name } = req.body;
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS user_preferences (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL UNIQUE,
-    preferences TEXT NOT NULL DEFAULT '{}',
-    updated_at DATETIME DEFAULT (datetime('now')),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-  );
-`);
+        if (!email || !password) {
+            return res.status(400).json({ success: false, error: 'Email and password are required' });
+        }
 
-// POST /api/auth/register - Register new user
-router.post('/auth/register', rateLimiter, (req, res) => {
-  try {
-    const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        error: !email ? 'Email is required' : 'Password is required'
-      });
-    }
-    
-    if (password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        error: 'Password must be at least 6 characters'
-      });
-    }
-    
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-    if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        error: 'Email already registered'
-      });
-    }
-    
-    const passwordHash = hashPassword(password);
-    const insertUser = db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)');
-    const result = insertUser.run(email, passwordHash);
-    
-    const user = db.prepare('SELECT id, email, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
-    const { accessToken, refreshToken } = generateAuthTokens(user);
-    storeRefreshToken(user.id, refreshToken);
-    
-    res.json({
-      success: true,
-      data: { user, accessToken, refreshToken }
-    });
-  } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to create account'
-    });
-  }
-});
+        if (password.length < 6) {
+            return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+        }
 
-// POST /api/auth/login - Login user
-router.post('/auth/login', rateLimiter, (req, res) => {
-  try {
-    const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email and password are required'
-      });
-    }
-    
-    const user = db.prepare('SELECT id, email, password_hash FROM users WHERE email = ?').get(email);
-    if (!user || !comparePassword(password, user.password_hash)) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid email or password'
-      });
-    }
-    
-    const userData = { id: user.id, email: user.email };
-    const { accessToken, refreshToken } = generateAuthTokens(userData);
-    storeRefreshToken(user.id, refreshToken);
-    
-    res.json({
-      success: true,
-      data: { user: userData, accessToken, refreshToken }
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Login failed'
-    });
-  }
-});
+        const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+        if (existingUser) {
+            return res.status(409).json({ success: false, error: 'Email already registered' });
+        }
 
-// POST /api/auth/refresh - Refresh access token
-router.post('/auth/refresh', (req, res) => {
-  try {
-    const { refreshToken } = req.body;
-    
-    if (!refreshToken) {
-      return res.status(400).json({
-        success: false,
-        error: 'Refresh token is required'
-      });
-    }
-    
-    const userId = verifyRefreshToken(refreshToken);
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid or expired refresh token'
-      });
-    }
-    
-    const user = db.prepare('SELECT id, email FROM users WHERE id = ?').get(userId);
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        error: 'User not found'
-      });
-    }
-    
-    const tokens = generateAuthTokens(user);
-    deleteRefreshToken(refreshToken);
-    storeRefreshToken(user.id, tokens.refreshToken);
-    
-    res.json({
-      success: true,
-      data: tokens
-    });
-  } catch (error) {
-    console.error('Refresh error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Token refresh failed'
-    });
-  }
-});
+        const passwordHash = await hashPassword(password);
 
-// POST /api/auth/logout - Logout user
-router.post('/auth/logout', authenticate, (req, res) => {
-  try {
-    const { refreshToken } = req.body;
-    if (refreshToken) deleteRefreshToken(refreshToken);
-    res.json({
-      success: true,
-      data: { message: 'Logged out successfully' }
-    });
-  } catch (error) {
-    console.error('Logout error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Logout failed'
-    });
-  }
-});
+        const stmt = db.prepare(`
+            INSERT INTO users (email, password_hash, name)
+            VALUES (?, ?, ?)
+        `);
+        const result = stmt.run(email, passwordHash, name || null);
 
-// GET /api/user/me - Get current user profile
-router.get('/user/me', authenticate, (req, res) => {
-  try {
-    const user = db.prepare('SELECT id, email, created_at FROM users WHERE id = ?').get(req.user.userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found'
-      });
-    }
-    res.json({
-      success: true,
-      data: { user }
-    });
-  } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch user'
-    });
-  }
-});
+        const tokens = generateAuthTokens(result.lastInsertRowid);
 
-// GET /api/user/favorites - Get user's favorites
-router.get('/user/favorites', authenticate, (req, res) => {
-  try {
-    const favorites = db.prepare(`
-      SELECT c.id, c.type, c.title, c.poster_url, c.backdrop_url, 
-             c.description, c.rating, c.year, c.genres, c.quality, c.duration,
-             f.created_at as added_at
-      FROM favorites f
-      JOIN content c ON f.content_id = c.id
-      WHERE f.user_id = ?
-      ORDER BY f.created_at DESC
-    `).all(req.user.userId);
-    
-    res.json({
-      success: true,
-      data: { favorites }
-    });
-  } catch (error) {
-    console.error('Get favorites error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch favorites'
-    });
-  }
-});
-
-// POST /api/user/favorites - Add content to favorites
-router.post('/user/favorites', authenticate, (req, res) => {
-  try {
-    const { contentId } = req.body;
-    
-    if (!contentId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Content ID is required'
-      });
-    }
-    
-    const content = db.prepare('SELECT id FROM content WHERE id = ?').get(contentId);
-    if (!content) {
-      return res.status(404).json({
-        success: false,
-        error: 'Content not found'
-      });
-    }
-    
-    db.prepare('INSERT OR IGNORE INTO favorites (user_id, content_id) VALUES (?, ?)').run(req.user.userId, contentId);
-    res.json({
-      success: true,
-      data: { message: 'Added to favorites' }
-    });
-  } catch (error) {
-    console.error('Add favorite error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to add favorite'
-    });
-  }
-});
-
-// DELETE /api/user/favorites/:contentId - Remove from favorites
-router.delete('/user/favorites/:contentId', authenticate, (req, res) => {
-  try {
-    const contentId = parseInt(req.params.contentId);
-    
-    if (isNaN(contentId)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid content ID'
-      });
-    }
-    
-    const result = db.prepare('DELETE FROM favorites WHERE user_id = ? AND content_id = ?').run(req.user.userId, contentId);
-    if (result.changes === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Favorite not found'
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: { message: 'Removed from favorites' }
-    });
-  } catch (error) {
-    console.error('Remove favorite error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to remove favorite'
-    });
-  }
-});
-
-// GET /api/user/history - Get watch history
-router.get('/user/history', authenticate, (req, res) => {
-  try {
-    const history = db.prepare(`
-      SELECT 
-        wh.id, wh.progress, wh.duration, wh.last_watched_at, wh.completed,
-        c.id as content_id, c.type, c.title, c.poster_url, c.backdrop_url,
-        c.description, c.rating, c.year, c.genres, c.quality,
-        e.id as episode_id, e.episode_number, e.title as episode_title,
-        e.thumbnail_url
-      FROM watch_history wh
-      JOIN content c ON wh.content_id = c.id
-      LEFT JOIN episodes e ON wh.episode_id = e.id
-      WHERE wh.user_id = ?
-      ORDER BY wh.last_watched_at DESC
-    `).all(req.user.userId);
-    
-    res.json({
-      success: true,
-      data: { history }
-    });
-  } catch (error) {
-    console.error('Get history error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch history'
-    });
-  }
-});
-
-// POST /api/user/history - Update watch history with progress
-router.post('/user/history', authenticate, (req, res) => {
-  try {
-    const { contentId, episodeId, progress, duration, completed } = req.body;
-    
-    if (!contentId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Content ID is required'
-      });
-    }
-    
-    const content = db.prepare('SELECT id FROM content WHERE id = ?').get(contentId);
-    if (!content) {
-      return res.status(404).json({
-        success: false,
-        error: 'Content not found'
-      });
-    }
-    
-    if (episodeId) {
-      const episode = db.prepare('SELECT id FROM episodes WHERE id = ?').get(episodeId);
-      if (!episode) {
-        return res.status(404).json({
-          success: false,
-          error: 'Episode not found'
+        res.status(201).json({
+            success: true,
+            data: {
+                userId: result.lastInsertRowid,
+                email,
+                name: name || null,
+                ...tokens
+            }
         });
-      }
+    } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({ success: false, error: 'Registration failed' });
     }
-    
-    let isCompleted = completed || 0;
-    if (progress && duration && !completed) {
-      isCompleted = progress >= duration * 0.9 ? 1 : 0;
-    }
-    
-    const existing = db.prepare(`
-      SELECT id FROM watch_history 
-      WHERE user_id = ? AND content_id = ? AND (episode_id = ? OR (episode_id IS NULL AND ? IS NULL))
-    `).get(req.user.userId, contentId, episodeId || null, episodeId || null);
-    
-    if (existing) {
-      db.prepare(`
-        UPDATE watch_history 
-        SET progress = ?, duration = ?, completed = ?, last_watched_at = datetime('now')
-        WHERE id = ?
-      `).run(progress || 0, duration || null, isCompleted, existing.id);
-    } else {
-      db.prepare(`
-        INSERT INTO watch_history (user_id, content_id, episode_id, progress, duration, completed, last_watched_at)
-        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-      `).run(req.user.userId, contentId, episodeId || null, progress || 0, duration || null, isCompleted);
-    }
-    
-    res.json({
-      success: true,
-      data: { message: 'Watch history updated' }
-    });
-  } catch (error) {
-    console.error('Update history error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to update history'
-    });
-  }
 });
 
-// DELETE /api/user/history/:contentId - Remove from watch history
-router.delete('/user/history/:contentId', authenticate, (req, res) => {
-  try {
-    const contentId = parseInt(req.params.contentId);
-    
-    if (isNaN(contentId)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid content ID'
-      });
+// POST /api/auth/login
+router.post('/auth/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ success: false, error: 'Email and password are required' });
+        }
+
+        const user = db.prepare('SELECT id, password_hash FROM users WHERE email = ?').get(email);
+        if (!user) {
+            return res.status(401).json({ success: false, error: 'Invalid credentials' });
+        }
+
+        const isValidPassword = await verifyPassword(password, user.password_hash);
+        if (!isValidPassword) {
+            return res.status(401).json({ success: false, error: 'Invalid credentials' });
+        }
+
+        const tokens = generateAuthTokens(user.id);
+        const userInfo = db.prepare('SELECT id, email, name FROM users WHERE id = ?').get(user.id);
+
+        res.json({
+            success: true,
+            data: {
+                ...userInfo,
+                ...tokens
+            }
+        });
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ success: false, error: 'Login failed' });
     }
-    
-    const result = db.prepare('DELETE FROM watch_history WHERE user_id = ? AND content_id = ?').run(req.user.userId, contentId);
-    if (result.changes === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'History entry not found'
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: { message: 'Removed from history' }
-    });
-  } catch (error) {
-    console.error('Remove history error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to remove from history'
-    });
-  }
 });
 
-// GET /api/user/preferences - Get user preferences
-router.get('/user/preferences', authenticate, (req, res) => {
-  try {
-    const prefs = db.prepare('SELECT preferences FROM user_preferences WHERE user_id = ?').get(req.user.userId);
-    let preferences = prefs ? JSON.parse(prefs.preferences) : {};
-    res.json({
-      success: true,
-      data: { preferences }
-    });
-  } catch (error) {
-    console.error('Get preferences error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch preferences'
-    });
-  }
+// POST /api/auth/refresh
+router.post('/auth/refresh', (req, res) => {
+    try {
+        const { refreshToken } = req.body;
+
+        if (!refreshToken) {
+            return res.status(400).json({ success: false, error: 'Refresh token is required' });
+        }
+
+        const tokenRecord = db.prepare('SELECT * FROM refresh_tokens WHERE token = ?').get(refreshToken);
+        if (!tokenRecord) {
+            return res.status(401).json({ success: false, error: 'Invalid refresh token' });
+        }
+
+        const expiresAt = new Date(tokenRecord.expires_at);
+        if (expiresAt <= new Date()) {
+            return res.status(401).json({ success: false, error: 'Refresh token expired' });
+        }
+
+        const newTokens = generateAuthTokens(tokenRecord.user_id);
+
+        res.json({
+            success: true,
+            data: newTokens
+        });
+    } catch (error) {
+        console.error('Token refresh error:', error);
+        res.status(500).json({ success: false, error: 'Token refresh failed' });
+    }
 });
 
-// PUT /api/user/preferences - Update user preferences
-router.put('/user/preferences', authenticate, (req, res) => {
-  try {
-    const { preferences } = req.body;
-    
-    if (!preferences || typeof preferences !== 'object') {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid preferences object'
-      });
+// GET /api/user/favorites
+router.get('/user/favorites', authenticateToken, (req, res) => {
+    try {
+        const favorites = db.prepare(`
+            SELECT c.* FROM favorites f
+            JOIN content c ON f.content_id = c.id
+            WHERE f.user_id = ?
+            ORDER BY f.created_at DESC
+        `).all(req.user.id);
+
+        res.json({ success: true, data: favorites });
+    } catch (error) {
+        console.error('Error fetching favorites:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch favorites' });
     }
-    
-    const prefsJson = JSON.stringify(preferences);
-    db.prepare(`
-      INSERT INTO user_preferences (user_id, preferences, updated_at)
-      VALUES (?, ?, datetime('now'))
-      ON CONFLICT(user_id) DO UPDATE SET
-        preferences = excluded.preferences,
-        updated_at = excluded.updated_at
-    `).run(req.user.userId, prefsJson);
-    
-    res.json({
-      success: true,
-      data: { preferences }
-    });
-  } catch (error) {
-    console.error('Update preferences error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to update preferences'
-    });
-  }
+});
+
+// POST /api/user/favorites
+router.post('/user/favorites', authenticateToken, (req, res) => {
+    try {
+        const { contentId } = req.body;
+
+        if (!contentId) {
+            return res.status(400).json({ success: false, error: 'Content ID is required' });
+        }
+
+        const existingFavorite = db.prepare(
+            'SELECT id FROM favorites WHERE user_id = ? AND content_id = ?'
+        ).get(req.user.id, contentId);
+
+        if (existingFavorite) {
+            return res.status(409).json({ success: false, error: 'Content already in favorites' });
+        }
+
+        const stmt = db.prepare(
+            'INSERT INTO favorites (user_id, content_id) VALUES (?, ?)'
+        );
+        const result = stmt.run(req.user.id, contentId);
+
+        res.status(201).json({
+            success: true,
+            data: { id: result.lastInsertRowid }
+        });
+    } catch (error) {
+        console.error('Error adding favorite:', error);
+        res.status(500).json({ success: false, error: 'Failed to add favorite' });
+    }
+});
+
+// DELETE /api/user/favorites/:id
+router.delete('/user/favorites/:id', authenticateToken, (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const stmt = db.prepare(
+            'DELETE FROM favorites WHERE id = ? AND user_id = ?'
+        );
+        const result = stmt.run(id, req.user.id);
+
+        if (result.changes === 0) {
+            return res.status(404).json({ success: false, error: 'Favorite not found' });
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error removing favorite:', error);
+        res.status(500).json({ success: false, error: 'Failed to remove favorite' });
+    }
+});
+
+// GET /api/user/history
+router.get('/user/history', authenticateToken, (req, res) => {
+    try {
+        const history = db.prepare(`
+            SELECT c.*, wh.progress, wh.completed, wh.created_at as watched_at, 
+                   s.title as season_title, e.title as episode_title, 
+                   e.episode_number, e.season_id
+            FROM watch_history wh
+            LEFT JOIN content c ON wh.content_id = c.id OR (wh.episode_id IS NOT NULL AND wh.content_id = (SELECT content_id FROM episodes WHERE id = wh.episode_id))
+            LEFT JOIN episodes e ON wh.episode_id = e.id
+            LEFT JOIN seasons s ON e.season_id = s.id
+            WHERE wh.user_id = ?
+            ORDER BY wh.created_at DESC
+        `).all(req.user.id);
+
+        res.json({ success: true, data: history });
+    } catch (error) {
+        console.error('Error fetching history:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch history' });
+    }
+});
+
+// GET /api/user/continue-watching
+router.get('/user/continue-watching', authenticateToken, (req, res) => {
+    try {
+        const continueWatching = db.prepare(`
+            SELECT c.*, wh.progress, wh.completed, wh.created_at as watched_at,
+                   s.title as season_title, e.title as episode_title, 
+                   e.episode_number, e.season_id
+            FROM watch_history wh
+            LEFT JOIN content c ON wh.content_id = c.id OR (wh.episode_id IS NOT NULL AND wh.content_id = (SELECT content_id FROM episodes WHERE id = wh.episode_id))
+            LEFT JOIN episodes e ON wh.episode_id = e.id
+            LEFT JOIN seasons s ON e.season_id = s.id
+            WHERE wh.user_id = ? AND wh.completed = 0
+            ORDER BY wh.created_at DESC
+            LIMIT 20
+        `).all(req.user.id);
+
+        res.json({ success: true, data: continueWatching });
+    } catch (error) {
+        console.error('Error fetching continue watching:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch continue watching' });
+    }
+});
+
+// POST /api/user/progress
+router.post('/user/progress', authenticateToken, (req, res) => {
+    try {
+        const { contentId, episodeId, progress, completed } = req.body;
+
+        if (!contentId || progress === undefined) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Content ID and progress are required' 
+            });
+        }
+
+        const existingRecord = db.prepare(`
+            SELECT id FROM watch_history 
+            WHERE user_id = ? AND content_id = ? AND (episode_id IS NULL OR episode_id = ?)
+        `).get(req.user.id, contentId, episodeId || null);
+
+        if (existingRecord) {
+            const stmt = db.prepare(`
+                UPDATE watch_history 
+                SET progress = ?, completed = ?, created_at = datetime('now')
+                WHERE id = ?
+            `);
+            stmt.run(progress, completed ? 1 : 0, existingRecord.id);
+        } else {
+            const stmt = db.prepare(`
+                INSERT INTO watch_history (user_id, content_id, episode_id, progress, completed)
+                VALUES (?, ?, ?, ?, ?)
+            `);
+            stmt.run(req.user.id, contentId, episodeId || null, progress, completed ? 1 : 0);
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error updating progress:', error);
+        res.status(500).json({ success: false, error: 'Failed to update progress' });
+    }
+});
+
+// GET /api/user/extensions
+router.get('/user/extensions', authenticateToken, (req, res) => {
+    try {
+        const extensions = db.prepare(`
+            SELECT * FROM extensions
+            ORDER BY name
+        `).all();
+
+        res.json({ success: true, data: extensions });
+    } catch (error) {
+        console.error('Error fetching extensions:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch extensions' });
+    }
+});
+
+// PUT /api/user/extensions/:id
+router.put('/user/extensions/:id', authenticateToken, (req, res) => {
+    try {
+        const { id } = req.params;
+        const { enabled } = req.body;
+
+        if (enabled === undefined) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Enabled status is required' 
+            });
+        }
+
+        const stmt = db.prepare(`
+            UPDATE extensions
+            SET enabled = ?
+            WHERE id = ?
+        `);
+        const result = stmt.run(enabled ? 1 : 0, id);
+
+        if (result.changes === 0) {
+            return res.status(404).json({ success: false, error: 'Extension not found' });
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error updating extension:', error);
+        res.status(500).json({ success: false, error: 'Failed to update extension' });
+    }
+});
+
+// POST /api/user/logout
+router.post('/user/logout', authenticateToken, (req, res) => {
+    try {
+        const { refreshToken } = req.body;
+        
+        if (refreshToken) {
+            const stmt = db.prepare(
+                'DELETE FROM refresh_tokens WHERE token = ?'
+            );
+            stmt.run(refreshToken);
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Logout error:', error);
+        res.status(500).json({ success: false, error: 'Logout failed' });
+    }
 });
 
 export default router;

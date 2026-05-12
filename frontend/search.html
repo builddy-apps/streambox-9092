@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamBox - Search</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            200: '#bfdbfe',
+                            300: '#93c5fd',
+                            400: '#60a5fa',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            800: '#1e40af',
+                            900: '#1e3a8a',
+                            950: '#172554'
+                        },
+                        accent: {
+                            50: '#fef2f2',
+                            100: '#fee2e2',
+                            200: '#fecaca',
+                            300: '#fca5a5',
+                            400: '#f87171',
+                            500: '#ef4444',
+                            600: '#dc2626',
+                            700: '#b91c1c',
+                            800: '#991b1b',
+                            900: '#7f1d1d',
+                            950: '#450a0a'
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        @keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes slide-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .animate-fade-in { animation: fade-in 0.4s ease-out forwards; }
+        .animate-scale-in { animation: scale-in 0.2s ease-out forwards; }
+        .animate-slide-up { animation: slide-up 0.3s ease-out forwards; }
+        
+        [data-focusable] {
+            outline: none;
+            transition: all 0.2s ease-out;
+        }
+        .dpad-focused {
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3);
+            transform: scale(1.05);
+            z-index: 10;
+        }
+        .dark .dpad-focused {
+            box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.5), 0 0 20px rgba(96, 165, 250, 0.3);
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            border: 4px solid rgba(59, 130, 246, 0.2);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        .dark .spinner {
+            border-color: rgba(96, 165, 250, 0.2);
+            border-top-color: #60a5fa;
+        }
+        
+        body { transition: background-color 0.3s ease, color 0.3s ease; }
+        
+        /* Result card hover animation */
+        .result-card {
+            transition: all 0.2s ease-out;
+        }
+        .result-card:hover {
+            transform: translateY(-4px);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-black text-slate-900 dark:text-white min-h-screen">
+    <div id="app-container" class="flex flex-col min-h-screen">
+        <!-- Header -->
+        <header class="sticky top-0 z-50 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-black/95 backdrop-blur-md">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16 sm:h-20">
+                    <!-- Logo -->
+                    <div class="flex items-center gap-3">
+                        <button onclick="window.location.href='/home.html'" class="flex items-center gap-2 group" data-focusable>
+                            <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-lg group-hover:shadow-primary-500/30 transition-shadow">
+                                <svg class="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                            </div>
+                            <span class="text-xl sm:text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-primary-400 dark:to-primary-600 bg-clip-text text-transparent">StreamBox</span>
+                        </button>
+                    </div>
+
+                    <!-- Navigation -->
+                    <nav class="flex items-center gap-1 sm:gap-2" id="main-nav">
+                        <a href="/home.html" class="nav-item px-4 py-2 sm:px-5 sm:py-2.5 text-base sm:text-lg font-medium rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-primary-600 dark:hover:text-primary-400 transition-all focus:outline-none focus:ring-2 focus:ring-primary-500" data-focusable>
+                            Home
+                        </a>
+                        <a href="/search.html" class="nav-item px-4 py-2 sm:px-5 sm:py-2.5 text-base sm:text-lg font-medium rounded-lg bg-primary-600 text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-black" data-focusable>
+                            Search
+                        </a>
+                        <a href="/library.html" class="nav-item px-4 py-2 sm:px-5 sm:py-2.5 text-base sm:text-lg font-medium rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-primary-600 dark:hover:text-primary-400 transition-all focus:outline-none focus:ring-2 focus:ring-primary-500" data-focusable>
+                            Library
+                        </a>
+                    </nav>
+
+                    <!-- Right side actions -->
+                    <div class="flex items-center gap-2 sm:gap-3">
+                        <button onclick="toggleDarkMode()" class="p-2.5 sm:p-3 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-primary-500" data-focusable aria-label="Toggle dark mode">
+                            <svg class="w-5 h-5 sm:w-6 sm:h-6 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                            </svg>
+                            <svg class="w-5 h-5 sm:w-6 sm:h-6 dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                            </svg>
+                        </button>
+                        <button onclick="handleAuthClick()" class="px-4 py-2 sm:px-5 sm:py-2.5 text-base sm:text-lg font-medium rounded-lg bg-primary-600 hover:bg-primary-700 text-white shadow-lg hover:shadow-primary-600/30 transition-all focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-black" data-focusable id="auth-btn">
+                            Sign In
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+            <!-- Search Section -->
+            <section class="mb-8 animate-slide-up">
+                <h1 class="text-3xl sm:text-4xl font-bold mb-6 text-slate-900 dark:text-white">Search</h1>
+                
+                <!-- Search Input -->
+                <div class="relative mb-6">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <svg class="h-5 w-5 sm:h-6 sm:w-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                    </div>
+                    <input 
+                        type="text" 
+                        id="search-input"
+                        class="w-full pl-12 pr-4 py-3 sm:py-4 text-lg sm:text-xl rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-primary-500 focus:ring-4 focus:ring-primary-500/20 transition-all"
+                        placeholder="Search movies, series, anime..."
+                        data-focusable
+                        autocomplete="off"
+                    >
+                    <button 
+                        id="clear-search"
+                        class="absolute inset-y-0 right-2 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hidden"
+                        data-focusable
+                    >
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Filter Bar -->
+                <div class="flex flex-wrap gap-3 sm:gap-4">
+                    <!-- Genre Filter -->
+                    <div class="flex-1 min-w-[140px] sm:min-w-[160px]">
+                        <label class="block text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Genre</label>
+                        <select 
+                            id="genre-filter"
+                            class="w-full px-4 py-2.5 text-base rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-primary-500 transition-all appearance-none cursor-pointer"
+                            data-focusable
+                        >
+                            <option value="">All Genres</option>
+                            <option value="Action">Action</option>
+                            <option value="Adventure">Adventure</option>
+                            <option value="Animation">Animation</option>
+                            <option value="Comedy">Comedy</option>
+                            <option value="Crime">Crime</option>
+                            <option value="Documentary">Documentary</option>
+                            <option value="Drama">Drama</option>
+                            <option value="Fantasy">Fantasy</option>
+                            <option value="Horror">Horror</option>
+                            <option value="Mystery">Mystery</option>
+                            <option value="Romance">Romance</option>
+                            <option value="Sci-Fi">Sci-Fi</option>
+                            <option value="Thriller">Thriller</option>
+                        </select>
+                    </div>
+
+                    <!-- Year Filter -->
+                    <div class="flex-1 min-w-[120px] sm:min-w-[140px]">
+                        <label class="block text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Year</label>
+                        <select 
+                            id="year-filter"
+                            class="w-full px-4 py-2.5 text-base rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-primary-500 transition-all appearance-none cursor-pointer"
+                            data-focusable
+                        >
+                            <option value="">All Years</option>
+                            <option value="2024">2024</option>
+                            <option value="2023">2023</option>
+                            <option value="2022">2022</option>
+                            <option value="2021">2021</option>
+                            <option value="2020">2020</option>
+                            <option value="2010s">2010s</option>
+                            <option value="2000s">2000s</option>
+                            <option value="1990s">1990s</option>
+                            <option value="older">Older</option>
+                        </select>
+                    </div>
+
+                    <!-- Quality Filter -->
+                    <div class="flex-1 min-w-[120px] sm:min-w-[140px]">
+                        <label class="block text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Quality</label>
+                        <select 
+                            id="quality-filter"
+                            class="w-full px-4 py-2.5 text-base rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-primary-500 transition-all appearance-none cursor-pointer"
+                            data-focusable
+                        >
+                            <option value="">All Quality</option>
+                            <option value="4K">4K Ultra HD</option>
+                            <option value="HD">1080p HD</option>
+                            <option value="SD">480p SD</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section>
+                <div class="flex items-center justify-between mb-4">
+                    <h2 id="results-title" class="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-white">Popular Content</h2>
+                    <span id="results-count" class="text-sm text-slate-500 dark:text-slate-400"></span>
+                </div>
+
+                <!-- Loading State -->
+                <div id="loading-state" class="hidden">
+                    <div class="flex flex-col items-center justify-center py-16">
+                        <div class="spinner w-12 h-12 sm:w-16 sm:h-16"></div>
+                        <p class="mt-4 text-base sm:text-lg text-slate-500 dark:text-slate-400">Searching...</p>
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div id="empty-state" class="hidden">
+                    <div class="flex flex-col items-center justify-center py-16 text-center">
+                        <svg class="w-20 h-20 sm:w-24 sm:h-24 text-slate-300 dark:text-slate-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <h3 class="text-xl sm:text-2xl font-semibold text-slate-700 dark:text-slate-300 mb-2">No results found</h3>
+                        <p class="text-base sm:text-lg text-slate-500 dark:text-slate-400 max-w-md mb-6">Try adjusting your search terms or filters to find what you're looking for.</p>
+                        <button onclick="clearAllFilters()" class="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-black" data-focusable>
+                            Clear All Filters
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Results Grid -->
+                <div id="results-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+                    <!-- Results will be rendered here -->
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="border-t border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-black/50 backdrop-blur-sm mt-auto">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <p class="text-sm text-slate-500 dark:text-slate-400">© 2024 StreamBox. Premium streaming optimized for TV.</p>
+                    <div class="flex items-center gap-4">
+                        <a href="#" class="text-sm text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors" data-focusable>Privacy</a>
+                        <a href="#" class="text-sm text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors" data-focusable>Terms</a>
+                        <a href="#" class="text-sm text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors" data-focusable>Help</a>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/app.js"></script>
+    <script src="/auth-client.js"></script>
+    <script>
+        let searchTimeout = null;
+        let currentResults = [];
+
+        function toggleDarkMode() {
+            if (window.StreamBox && window.StreamBox.DarkMode) {
+                window.StreamBox.DarkMode.toggle();
+            }
+        }
+
+        function handleAuthClick() {
+            if (window.StreamBox && window.StreamBox.Auth) {
+                if (window.StreamBox.Auth.isAuthenticated()) {
+                    window.StreamBox.Auth.logout();
+                } else {
+                    window.StreamBox.PageTransition.navigate('/login.html');
+                }
+            }
+        }
+
+        function updateAuthButton() {
+            const authBtn = document.getElementById('auth-btn');
+            if (window.StreamBox && window.StreamBox.Auth && authBtn) {
+                const isAuthenticated = window.StreamBox.Auth.isAuthenticated();
+                authBtn.textContent = isAuthenticated ? 'Sign Out' : 'Sign In';
+            }
+        }
+
+        function getQualityColor(quality) {
+            const colors = {
+                '4K': 'bg-green-500',
+                'HD': 'bg-blue-500',
+                'SD': 'bg-yellow-500'
+            };
+            return colors[quality] || 'bg-slate-500';
+        }
+
+        function renderResults(results) {
+            const grid = document.getElementById('results-grid');
+            const emptyState = document.getElementById('empty-state');
+            const loadingState = document.getElementById('loading-state');
+            const resultsCount = document.getElementById('results-count');
+
+            loadingState.classList.add('hidden');
+
+            if (!results || results.length === 0) {
+                grid.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+                resultsCount.textContent = '';
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            grid.classList.remove('hidden');
+            resultsCount.textContent = `${results.length} result${results.length !== 1 ? 's' : ''}`;
+
+            grid.innerHTML = results.map((item, index) => `
+                <button 
+                    onclick="openContent(${item.id})"
+                    class="result-card group relative aspect-[2/3] rounded-xl overflow-hidden bg-slate-200 dark:bg-slate-800 shadow-md focus:outline-none"
+                    data-focusable
+                    style="animation: scale-in 0.3s ease-out ${index * 0.05}s forwards; opacity: 0;"
+                >
+                    <!-- Poster Image -->
+                    <img 
+                        src="${item.poster_url || 'https://via.placeholder.com/300x450/1e293b/64748b?text=No+Poster'}"
+                        alt="${item.title}"
+                        class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        loading="lazy"
+                    >
+                    
+                    <!-- Overlay Gradient -->
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    
+                    <!-- Quality Badge -->
+                    <div class="absolute top-2 left-2">
+                        <span class="px-2 py-1 ${getQualityColor(item.quality)} text-white text-xs font-bold rounded-md shadow-sm">
+                            ${item.quality || 'HD'}
+                        </span>
+                    </div>
+                    
+                    <!-- Play Icon Overlay -->
+                    <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-primary-600/90 flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
+                            <svg class="w-6 h-6 sm:w-7 sm:h-7 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                        </div>
+                    </div>
+                    
+                    <!-- Title & Info -->
+                    <div class="absolute bottom-0 left-0 right-0 p-3 sm:p-4 transform translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+                        <h3 class="text-sm sm:text-base font-semibold text-white truncate mb-1">${item.title}</h3>
+                        <div class="flex items-center gap-2 text-xs text-slate-300">
+                            <span class="flex items-center gap-1">
+                                <svg class="w-3.5 h-3.5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                </svg>
+                                ${item.rating?.toFixed(1) || 'N/A'}
+                            </span>
+                            <span>•</span>
+                            <span>${item.year || 'N/A'}</span>
+                        </div>
+                    </div>
+                </button>
+            `).join('');
+
+            // Update D-pad navigation
+            if (window.StreamBox && window.StreamBox.DPadNav) {
+                window.StreamBox.DPadNav.updateFocusable(grid, '[data-focusable]');
+            }
+        }
+
+        async function performSearch() {
+            const query = document.getElementById('search-input').value.trim();
+            const genre = document.getElementById('genre-filter').value;
+            const year = document.getElementById('year-filter').value;
+            const quality = document.getElementById('quality-filter').value;
+
+            const grid = document.getElementById('results-grid');
+            const emptyState = document.getElementById('empty-state');
+            const loadingState = document.getElementById('loading-state');
+            const resultsTitle = document.getElementById('results-title');
+
+            loadingState.classList.remove('hidden');
+            grid.classList.add('hidden');
+            emptyState.classList.add('hidden');
+
+            // Update title based on search
+            if (query) {
+                resultsTitle.textContent = `Search results for "${query}"`;
+            } else if (genre || year || quality) {
+                resultsTitle.textContent = 'Filtered results';
+            } else {
+                resultsTitle.textContent = 'Popular Content';
+            }
+
+            try {
+                const params = new URLSearchParams();
+                if (query) params.append('q', query);
+                if (genre) params.append('genre', genre);
+                if (year) params.append('year', year);
+                if (quality) params.append('quality', quality);
+
+                const response = await window.StreamBox.API.get(`/api/content/search?${params.toString()}`);
+                
+                if (response.success) {
+                    currentResults = response.data;
+                    renderResults(currentResults);
+                } else {
+                    throw new Error(response.error || 'Search failed');
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                window.StreamBox.Toast.show(error.message || 'Failed to search. Please try again.', 'error');
+                loadingState.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+            }
+        }
+
+        function debounceSearch() {
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
+            }
+            searchTimeout = setTimeout(() => {
+                performSearch();
+            }, 500);
+        }
+
+        function clearAllFilters() {
+            document.getElementById('search-input').value = '';
+            document.getElementById('genre-filter').value = '';
+            document.getElementById('year-filter').value = '';
+            document.getElementById('quality-filter').value = '';
+            document.getElementById('clear-search').classList.add('hidden');
+            performSearch();
+        }
+
+        function openContent(id) {
+            window.StreamBox.PageTransition.navigate(`/detail.html?id=${id}`);
+        }
+
+        function initializeSearch() {
+            const searchInput = document.getElementById('search-input');
+            const clearButton = document.getElementById('clear-search');
+            const genreFilter = document.getElementById('genre-filter');
+            const yearFilter = document.getElementById('year-filter');
+            const qualityFilter = document.getElementById('quality-filter');
+
+            // Search input handler
+            searchInput.addEventListener('input', () => {
+                clearButton.classList.toggle('hidden', !searchInput.value.trim());
+                debounceSearch();
+            });
+
+            // Clear button handler
+            clearButton.addEventListener('click', clearAllFilters);
+
+            // Filter handlers
+            genreFilter.addEventListener('change', performSearch);
+            yearFilter.addEventListener('change', performSearch);
+            qualityFilter.addEventListener('change', performSearch);
+
+            // Focus search input on load
+            searchInput.focus();
+
+            // Initial search to show popular content
+            performSearch();
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            updateAuthButton();
+            
+            // Wait for StreamBox to be available
+            const checkStreamBox = setInterval(() => {
+                if (window.StreamBox) {
+                    clearInterval(checkStreamBox);
+                    initializeSearch();
+                }
+            }, 100);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamBox - Player</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd',
+                            400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8',
+                            800: '#1e40af', 900: '#1e3a8a', 950: '#172554'
+                        },
+                        accent: {
+                            50: '#fef2f2', 100: '#fee2e2', 200: '#fecaca', 300: '#fca5a5',
+                            400: '#f87171', 500: '#ef4444', 600: '#dc2626', 700: '#b91c1c',
+                            800: '#991b1b', 900: '#7f1d1d', 950: '#450a0a'
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slide-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
+        .animate-slide-up { animation: slide-up 0.4s ease-out forwards; }
+        .animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+        
+        [data-focusable] {
+            outline: none;
+            transition: all 0.2s ease-out;
+        }
+        .dpad-focused {
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.5);
+            transform: scale(1.1);
+            z-index: 50;
+        }
+        .dark .dpad-focused {
+            box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.6), 0 0 30px rgba(96, 165, 250, 0.5);
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            border: 4px solid rgba(59, 130, 246, 0.2);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        .dark .spinner {
+            border-color: rgba(96, 165, 250, 0.2);
+            border-top-color: #60a5fa;
+        }
+        
+        /* Video player controls auto-hide */
+        .controls-container {
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+        }
+        .controls-hidden {
+            opacity: 0;
+            transform: translateY(20px);
+            pointer-events: none;
+        }
+        
+        /* Custom seek bar */
+        .seek-bar {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .seek-bar::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+            transition: transform 0.2s;
+        }
+        .seek-bar::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+        .seek-bar::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+        .dark .seek-bar {
+            background: rgba(0, 0, 0, 0.5);
+        }
+        
+        /* Quality indicator colors */
+        .quality-4k { color: #10b981; }
+        .quality-hd { color: #3b82f6; }
+        .quality-sd { color: #f59e0b; }
+        
+        /* Video container */
+        .video-container {
+            background: #000;
+            position: relative;
+        }
+        
+        /* Button press animation */
+        .btn-press:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body class="bg-black text-white min-h-screen overflow-hidden">
+    <!-- Main Video Container -->
+    <div id="player-container" class="fixed inset-0 video-container flex items-center justify-center">
+        <!-- Loading State -->
+        <div id="loading-state" class="absolute inset-0 flex flex-col items-center justify-center bg-black z-20">
+            <div class="spinner w-16 h-16"></div>
+            <p class="mt-6 text-xl text-slate-400 animate-pulse-glow">Loading player...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="error-state" class="absolute inset-0 flex flex-col items-center justify-center bg-black z-20 hidden">
+            <div class="text-red-500 mb-4">
+                <svg class="w-20 h-20 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold mb-2">Playback Error</h2>
+            <p id="error-message" class="text-slate-400 mb-6 text-center px-8">Failed to load video</p>
+            <button onclick="goBack()" class="px-8 py-3 bg-primary-600 hover:bg-primary-700 rounded-lg font-medium transition-colors btn-press" data-focusable>
+                Go Back
+            </button>
+        </div>
+
+        <!-- Video Element -->
+        <video id="video-player" class="w-full h-full object-contain" preload="metadata">
+            <p class="text-white">Your browser does not support the video tag.</p>
+        </video>
+
+        <!-- Quality Indicator Overlay -->
+        <div id="quality-indicator" class="absolute top-6 right-6 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-lg text-sm font-bold z-10 hidden">
+            <span id="quality-text">HD</span>
+        </div>
+
+        <!-- Subtitles Display -->
+        <div id="subtitles-display" class="absolute bottom-32 left-0 right-0 text-center px-8 z-10">
+            <p id="subtitle-text" class="text-2xl font-medium text-white drop-shadow-lg bg-black/50 inline-block px-4 py-2 rounded hidden"></p>
+        </div>
+
+        <!-- Controls Container -->
+        <div id="controls-container" class="controls-container absolute inset-0 z-10 flex flex-col justify-between bg-gradient-to-b from-black/70 via-transparent to-black/80">
+            <!-- Top Bar -->
+            <div class="flex items-center justify-between p-6">
+                <div class="flex items-center gap-4">
+                    <button onclick="goBack()" class="p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors btn-press" data-focusable aria-label="Go back">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                        </svg>
+                    </button>
+                    <div class="flex flex-col">
+                        <h1 id="content-title" class="text-xl font-bold truncate max-w-lg">Loading...</h1>
+                        <p id="episode-title" class="text-sm text-slate-300"></p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <!-- Quality Badge -->
+                    <span id="quality-badge" class="px-3 py-1 rounded text-sm font-bold quality-hd bg-white/10">HD</span>
+                </div>
+            </div>
+
+            <!-- Center Play/Pause (Big) -->
+            <div id="center-play-btn" class="absolute inset-0 flex items-center justify-center">
+                <button id="play-pause-big" onclick="togglePlay()" class="w-24 h-24 rounded-full bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-all flex items-center justify-center btn-press" data-focusable aria-label="Play or pause">
+                    <svg id="big-play-icon" class="w-12 h-12 ml-2" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                    <svg id="big-pause-icon" class="w-12 h-12 hidden" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Bottom Controls -->
+            <div class="p-6 space-y-4">
+                <!-- Seek Bar -->
+                <div class="flex items-center gap-4">
+                    <span id="current-time" class="text-sm font-mono min-w-[60px]">0:00</span>
+                    <input type="range" id="seek-bar" class="seek-bar flex-1" min="0" max="100" value="0" data-focusable aria-label="Seek">
+                    <span id="duration-time" class="text-sm font-mono min-w-[60px]">0:00</span>
+                </div>
+
+                <!-- Control Buttons -->
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <!-- Rewind 10s -->
+                        <button onclick="seek(-10)" class="p-3 rounded-lg bg-white/10 hover:bg-white/20 transition-colors btn-press" data-focusable aria-label="Rewind 10 seconds">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z"/>
+                                <text x="12" y="22" font-size="8" text-anchor="middle" fill="currentColor">10</text>
+                            </svg>
+                        </button>
+
+                        <!-- Play/Pause -->
+                        <button id="play-pause-btn" onclick="togglePlay()" class="p-4 rounded-xl bg-primary-600 hover:bg-primary-700 transition-colors btn-press" data-focusable aria-label="Play or pause">
+                            <svg id="play-icon" class="w-8 h-8 ml-1" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                            <svg id="pause-icon" class="w-8 h-8 hidden" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                            </svg>
+                        </button>
+
+                        <!-- Forward 10s -->
+                        <button onclick="seek(10)" class="p-3 rounded-lg bg-white/10 hover:bg-white/20 transition-colors btn-press" data-focusable aria-label="Forward 10 seconds">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z"/>
+                                <text x="12" y="22" font-size="8" text-anchor="middle" fill="currentColor">10</text>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <!-- Subtitle Toggle -->
+                        <button id="subtitle-toggle" onclick="toggleSubtitles()" class="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors btn-press" data-focusable aria-label="Toggle subtitles">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
+                            </svg>
+                            <span id="subtitle-label" class="text-sm font-medium">OFF</span>
+                        </button>
+
+                        <!-- Next Episode -->
+                        <button id="next-episode-btn" onclick="playNextEpisode()" class="hidden flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 transition-colors btn-press" data-focusable aria-label="Next episode">
+                            <span class="text-sm font-medium">Next</span>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/app.js"></script>
+    <script src="/auth-client.js"></script>
+    <script>
+        // Player State
+        const Player = {
+            video: null,
+            controlsTimeout: null,
+            controlsVisible: true,
+            contentId: null,
+            episodeId: null,
+            seasonId: null,
+            contentTitle: '',
+            episodeTitle: '',
+            quality: 'HD',
+            subtitlesEnabled: false,
+            progressSaveInterval: null,
+            nextEpisode: null,
+            inactivityTime: 5000
+        };
+
+        // Initialize Player
+        document.addEventListener('DOMContentLoaded', async () => {
+            Player.video = document.getElementById('video-player');
+            
+            // Get URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            Player.contentId = urlParams.get('contentId');
+            Player.episodeId = urlParams.get('episodeId');
+            Player.seasonId = urlParams.get('seasonId');
+
+            if (!Player.contentId) {
+                showError('Missing content ID');
+                return;
+            }
+
+            // Check authentication
+            if (!window.StreamBox.Auth.isAuthenticated()) {
+                window.location.href = '/login.html';
+                return;
+            }
+
+            // Initialize controls
+            initControls();
+            initEventListeners();
+
+            // Load video
+            await loadVideo();
+
+            // Show quality indicator briefly
+            showQualityIndicator();
+        });
+
+        async function loadVideo() {
+            try {
+                const loadingState = document.getElementById('loading-state');
+                
+                // Fetch episode details
+                let videoUrl;
+                let duration;
+                
+                if (Player.episodeId) {
+                    const res = await window.StreamBox.API.get(`/api/content/${Player.contentId}`);
+                    const content = res.data;
+                    
+                    Player.contentTitle = content.title;
+                    Player.quality = content.quality || 'HD';
+                    
+                    // Find the episode
+                    const episode = content.episodes?.find(ep => ep.id === parseInt(Player.episodeId));
+                    if (!episode) {
+                        throw new Error('Episode not found');
+                    }
+                    
+                    videoUrl = episode.video_url;
+                    Player.episodeTitle = `S${episode.season_number || 1} E${episode.episode_number}: ${episode.title}`;
+                    duration = episode.duration;
+                    
+                    // Check for next episode
+                    const currentIndex = content.episodes.findIndex(ep => ep.id === parseInt(Player.episodeId));
+                    if (currentIndex < content.episodes.length - 1) {
+                        Player.nextEpisode = content.episodes[currentIndex + 1];
+                    }
+                } else {
+                    const res = await window.StreamBox.API.get(`/api/content/${Player.contentId}`);
+                    const content = res.data;
+                    
+                    Player.contentTitle = content.title;
+                    videoUrl = content.video_url;
+                    Player.episodeTitle = content.title;
+                    Player.quality = content.quality || 'HD';
+                    duration = content.duration;
+                }
+
+                // Update UI
+                document.getElementById('content-title').textContent = Player.contentTitle;
+                document.getElementById('episode-title').textContent = Player.episodeTitle;
+                updateQualityBadge(Player.quality);
+                
+                if (Player.nextEpisode) {
+                    document.getElementById('next-episode-btn').classList.remove('hidden');
+                    document.getElementById('next-episode-btn').classList.add('flex');
+                }
+
+                // Set video source
+                Player.video.src = videoUrl;
+
+                // Wait for metadata to load
+                await new Promise((resolve, reject) => {
+                    Player.video.addEventListener('loadedmetadata', resolve);
+                    Player.video.addEventListener('error', reject);
+                    setTimeout(() => reject(new Error('Video load timeout')), 10000);
+                });
+
+                // Get saved progress
+                const savedProgress = await getSavedProgress();
+                if (savedProgress && savedProgress.progress_seconds > 0) {
+                    Player.video.currentTime = savedProgress.progress_seconds;
+                    showResumeToast(savedProgress.progress_seconds);
+                }
+
+                // Update duration
+                updateDurationDisplay();
+                loadingState.classList.add('hidden');
+
+                // Start auto-save progress
+                startProgressSave();
+
+                // Start inactivity timer for controls
+                resetControlsTimer();
+
+            } catch (error) {
+                console.error('Failed to load video:', error);
+                showError(error.message || 'Failed to load video');
+            }
+        }
+
+        async function getSavedProgress() {
+            try {
+                const res = await window.StreamBox.API.get(`/api/user/progress?contentId=${Player.contentId}&episodeId=${Player.episodeId || ''}`);
+                if (res.success && res.data) {
+                    return res.data;
+                }
+            } catch (error) {
+                console.error('Failed to get progress:', error);
+            }
+            return null;
+        }
+
+        function showResumeToast(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            window.StreamBox.Toast.show(`Resuming from ${minutes}m ${Math.floor(seconds % 60)}s`, 'info', 3000);
+        }
+
+        function startProgressSave() {
+            Player.progressSaveInterval = setInterval(async () => {
+                if (Player.video && !Player.video.paused && Player.video.currentTime > 0) {
+                    try {
+                        await window.StreamBox.API.post('/api/user/progress', {
+                            content_id: Player.contentId,
+                            episode_id: Player.episodeId || null,
+                            progress_seconds: Math.floor(Player.video.currentTime),
+                            duration_seconds: Math.floor(Player.video.duration || 0),
+                            completed: Player.video.ended
+                        });
+                    } catch (error) {
+                        console.error('Failed to save progress:', error);
+                    }
+                }
+            }, 5000);
+        }
+
+        function initControls() {
+            const seekBar = document.getElementById('seek-bar');
+            
+            // Seek bar input
+            seekBar.addEventListener('input', () => {
+                const time = (seekBar.value / 100) * Player.video.duration;
+                Player.video.currentTime = time;
+                resetControlsTimer();
+            });
+        }
+
+        function initEventListeners() {
+            // Video events
+            Player.video.addEventListener('timeupdate', updateProgress);
+            Player.video.addEventListener('play', onPlay);
+            Player.video.addEventListener('pause', onPause);
+            Player.video.addEventListener('ended', onEnded);
+            
+            // Show controls on video container click
+            document.getElementById('player-container').addEventListener('click', toggleControls);
+            
+            // Activity detection
+            const activities = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'click'];
+            activities.forEach(event => {
+                document.addEventListener(event, () => {
+                    showControls();
+                    resetControlsTimer();
+                });
+            });
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.key === ' ' || e.key === 'k') {
+                    e.preventDefault();
+                    togglePlay();
+                } else if (e.key === 'ArrowLeft') {
+                    seek(-10);
+                } else if (e.key === 'ArrowRight') {
+                    seek(10);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    changeVolume(0.1);
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    changeVolume(-0.1);
+                } else if (e.key === 'f') {
+                    toggleFullscreen();
+                } else if (e.key === 'c') {
+                    toggleSubtitles();
+                } else if (e.key === 'Escape') {
+                    goBack();
+                }
+            });
+        }
+
+        function togglePlay() {
+            if (Player.video.paused) {
+                Player.video.play();
+            } else {
+                Player.video.pause();
+            }
+            resetControlsTimer();
+        }
+
+        function onPlay() {
+            document.getElementById('play-icon').classList.add('hidden');
+            document.getElementById('pause-icon').classList.remove('hidden');
+            document.getElementById('big-play-icon').classList.add('hidden');
+            document.getElementById('big-pause-icon').classList.remove('hidden');
+        }
+
+        function onPause() {
+            document.getElementById('play-icon').classList.remove('hidden');
+            document.getElementById('pause-icon').classList.add('hidden');
+            document.getElementById('big-play-icon').classList.remove('hidden');
+            document.getElementById('big-pause-icon').classList.add('hidden');
+            showControls();
+        }
+
+        function onEnded() {
+            // Save final progress as completed
+            saveProgress(true);
+            
+            // Auto-play next episode if available
+            if (Player.nextEpisode) {
+                window.StreamBox.Toast.show('Playing next episode...', 'info', 2000);
+                setTimeout(() => {
+                    window.location.href = `/player.html?contentId=${Player.contentId}&episodeId=${Player.nextEpisode.id}&seasonId=${Player.nextEpisode.season_id}`;
+                }, 2000);
+            } else {
+                window.StreamBox.Toast.show('Playback completed', 'success', 3000);
+            }
+        }
+
+        async function saveProgress(completed = false) {
+            try {
+                await window.StreamBox.API.post('/api/user/progress', {
+                    content_id: Player.contentId,
+                    episode_id: Player.episodeId || null,
+                    progress_seconds: Math.floor(Player.video.currentTime),
+                    duration_seconds: Math.floor(Player.video.duration || 0),
+                    completed: completed
+                });
+            } catch (error) {
+                console.error('Failed to save progress:', error);
+            }
+        }
+
+        function seek(seconds) {
+            Player.video.currentTime = Math.max(0, Math.min(Player.video.duration, Player.video.currentTime + seconds));
+            showSeekIndicator(seconds);
+            resetControlsTimer();
+        }
+
+        function showSeekIndicator(seconds) {
+            const indicator = document.createElement('div');
+            indicator.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/80 px-6 py-3 rounded-lg text-2xl font-bold z-50 animate-fade-in';
+            indicator.textContent = seconds > 0 ? `+${seconds}s` : `${seconds}s`;
+            document.body.appendChild(indicator);
+            setTimeout(() => indicator.remove(), 500);
+        }
+
+        function changeVolume(delta) {
+            Player.video.volume = Math.max(0, Math.min(1, Player.video.volume + delta));
+            window.StreamBox.Toast.show(`Volume: ${Math.round(Player.video.volume * 100)}%`, 'info', 1500);
+            resetControlsTimer();
+        }
+
+        function updateProgress() {
+            const progress = (Player.video.currentTime / Player.video.duration) * 100;
+            document.getElementById('seek-bar').value = progress;
+            document.getElementById('current-time').textContent = formatTime(Player.video.currentTime);
+        }
+
+        function updateDurationDisplay() {
+            document.getElementById('duration-time').textContent = formatTime(Player.video.duration);
+            document.getElementById('seek-bar').max = 100;
+        }
+
+        function formatTime(seconds) {
+            if (!seconds || isNaN(seconds)) return '0:00';
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function toggleControls() {
+            if (Player.controlsVisible) {
+                hideControls();
+            } else {
+                showControls();
+                resetControlsTimer();
+            }
+        }
+
+        function showControls() {
+            Player.controlsVisible = true;
+            document.getElementById('controls-container').classList.remove('controls-hidden');
+        }
+
+        function hideControls() {
+            Player.controlsVisible = false;
+            document.getElementById('controls-container').classList.add('controls-hidden');
+        }
+
+        function resetControlsTimer() {
+            if (Player.controlsTimeout) {
+                clearTimeout(Player.controlsTimeout);
+            }
+            
+            // Only auto-hide if video is playing
+            if (!Player.video.paused) {
+                Player.controlsTimeout = setTimeout(hideControls, Player.inactivityTime);
+            }
+        }
+
+        function toggleSubtitles() {
+            Player.subtitlesEnabled = !Player.subtitlesEnabled;
+            const label = document.getElementById('subtitle-label');
+            const subtitleText = document.getElementById('subtitle-text');
+            
+            if (Player.subtitlesEnabled) {
+                label.textContent = 'ON';
+                subtitleText.classList.remove('hidden');
+                window.StreamBox.Toast.show('Subtitles enabled', 'info', 2000);
+            } else {
+                label.textContent = 'OFF';
+                subtitleText.classList.add('hidden');
+                window.StreamBox.Toast.show('Subtitles disabled', 'info', 2000);
+            }
+            resetControlsTimer();
+        }
+
+        function updateQualityBadge(quality) {
+            const badge = document.getElementById('quality-badge');
+            badge.textContent = quality.toUpperCase();
+            badge.className = 'px-3 py-1 rounded text-sm font-bold bg-white/10 ';
+            
+            if (quality.toUpperCase() === '4K') {
+                badge.classList.add('quality-4k');
+            } else if (quality.toUpperCase() === 'HD') {
+                badge.classList.add('quality-hd');
+            } else {
+                badge.classList.add('quality-sd');
+            }
+        }
+
+        function showQualityIndicator() {
+            const indicator = document.getElementById('quality-indicator');
+            document.getElementById('quality-text').textContent = Player.quality;
+            indicator.classList.remove('hidden');
+            
+            setTimeout(() => {
+                indicator.classList.add('hidden');
+            }, 3000);
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+            resetControlsTimer();
+        }
+
+        async function playNextEpisode() {
+            if (!Player.nextEpisode) return;
+            
+            // Save current progress
+            await saveProgress(false);
+            
+            window.location.href = `/player.html?contentId=${Player.contentId}&episodeId=${Player.nextEpisode.id}&seasonId=${Player.nextEpisode.season_id}`;
+        }
+
+        function showError(message) {
+            document.getElementById('loading-state').classList.add('hidden');
+            document.getElementById('error-state').classList.remove('hidden');
+            document.getElementById('error-message').textContent = message;
+        }
+
+        function goBack() {
+            // Save progress before leaving
+            if (Player.video && Player.video.currentTime > 0) {
+                saveProgress(false);
+            }
+            
+            clearInterval(Player.progressSaveInterval);
+            window.history.back();
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (Player.video && Player.video.currentTime > 0) {
+                navigator.sendBeacon('/api/user/progress', JSON.stringify({
+                    content_id: Player.contentId,
+                    episode_id: Player.episodeId || null,
+                    progress_seconds: Math.floor(Player.video.currentTime),
+                    duration_seconds: Math.floor(Player.video.duration || 0),
+                    completed: Player.video.ended
+                }));
+            }
+        });
+    </script>
+</body>
+</html>

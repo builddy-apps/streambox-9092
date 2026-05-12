@@ -1,6 +1,6 @@
 # StreamBox
 
-Premium streaming web app optimized for Samsung Tizen TV with D-pad navigation, video player, and content library management
+Premium streaming app optimized for Samsung Tizen TV with D-pad navigation, video player, favorites, and plugin system
 
 Built with [Builddy](https://builddy.dev) — AI-powered app builder using GLM 5.1.
 
@@ -9,16 +9,16 @@ Built with [Builddy](https://builddy.dev) — AI-powered app builder using GLM 5
 - homepage_sections
 - search_with_filters
 - video_player_tv_controls
-- favorites_system
+- tv_dpad_navigation
+- favorites
 - watch_history
 - continue_watching
-- dpad_navigation
-- extension_management
-- content_details
+- extensions_plugins
+- content_detail_with_seasons
 - subtitle_toggle
+- quality_indicator_4k_hd_sd
 - amoled_dark_theme
-- quality_indicators
-- cinematic_transitions
+- cinemagraphic_transitions
 
 ## Quick Start
 

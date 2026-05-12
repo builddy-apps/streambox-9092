@@ -1,253 +1,192 @@
 import crypto from 'crypto';
 import db from './db.js';
 
-// JWT Configuration
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString('hex');
-const ACCESS_TOKEN_EXPIRY = 15 * 60 * 1000; // 15 minutes
-const REFRESH_TOKEN_EXPIRY = 7 * 24 * 60 * 60 * 1000; // 7 days
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+const JWT_ACCESS_EXPIRY = 15 * 60 * 1000;
+const JWT_REFRESH_EXPIRY = 7 * 24 * 60 * 60 * 1000;
 
-// Rate limiting store (in-memory)
-const rateLimitStore = new Map();
-const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
-const RATE_LIMIT_MAX_ATTEMPTS = 5;
+const createRefreshTokensTable = () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS refresh_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token TEXT UNIQUE NOT NULL,
+            expires_at TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    `);
+};
 
-// Clean up expired rate limit entries periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, value] of rateLimitStore.entries()) {
-    if (now - value.firstAttempt > RATE_LIMIT_WINDOW) {
-      rateLimitStore.delete(key);
+createRefreshTokensTable();
+
+export const hashPassword = async (password, salt = null) => {
+    if (!salt) {
+        salt = crypto.randomBytes(16).toString('hex');
     }
-  }
-}, 5 * 60 * 1000);
-
-// Rate limiter middleware for auth endpoints
-export function rateLimiter(req, res, next) {
-  const ip = req.ip || req.connection.remoteAddress || 'unknown';
-  const key = `auth:${ip}`;
-  
-  const now = Date.now();
-  const record = rateLimitStore.get(key);
-  
-  if (!record) {
-    rateLimitStore.set(key, { count: 1, firstAttempt: now });
-    return next();
-  }
-  
-  if (now - record.firstAttempt > RATE_LIMIT_WINDOW) {
-    record.count = 1;
-    record.firstAttempt = now;
-    return next();
-  }
-  
-  if (record.count >= RATE_LIMIT_MAX_ATTEMPTS) {
-    const resetTime = Math.ceil((record.firstAttempt + RATE_LIMIT_WINDOW - now) / 1000);
-    return res.status(429).json({
-      success: false,
-      error: `Too many attempts. Try again in ${resetTime} seconds.`
+    const derivedKey = await new Promise((resolve, reject) => {
+        crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+            if (err) reject(err);
+            else resolve(derivedKey);
+        });
     });
-  }
-  
-  record.count++;
-  return next();
-}
+    return `${salt}:${derivedKey.toString('hex')}`;
+};
 
-// Password hashing using crypto.scrypt
-export function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const derivedKey = crypto.scryptSync(password, salt, 64);
-  return salt + ':' + derivedKey.toString('hex');
-}
-
-// Password verification
-export function comparePassword(password, hash) {
-  const parts = hash.split(':');
-  if (parts.length !== 2) return false;
-  
-  const salt = parts[0];
-  const storedKey = parts[1];
-  
-  const derivedKey = crypto.scryptSync(password, salt, 64);
-  return crypto.timingSafeEqual(
-    Buffer.from(storedKey, 'hex'),
-    derivedKey
-  );
-}
-
-// Base64URL encoding helper
-function base64UrlEncode(data) {
-  return Buffer.from(data)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
-}
-
-// Base64URL decoding helper
-function base64UrlDecode(data) {
-  let base64 = data.replace(/-/g, '+').replace(/_/g, '/');
-  while (base64.length % 4) base64 += '=';
-  return Buffer.from(base64, 'base64').toString('utf-8');
-}
-
-// JWT token generation
-export function generateToken(payload) {
-  const header = {
-    alg: 'HS256',
-    typ: 'JWT'
-  };
-  
-  const now = Date.now();
-  const tokenPayload = {
-    ...payload,
-    iat: Math.floor(now / 1000),
-    exp: Math.floor((now + ACCESS_TOKEN_EXPIRY) / 1000)
-  };
-  
-  const encodedHeader = base64UrlEncode(JSON.stringify(header));
-  const encodedPayload = base64UrlEncode(JSON.stringify(tokenPayload));
-  
-  const signatureData = `${encodedHeader}.${encodedPayload}`;
-  const signature = crypto
-    .createHmac('sha256', JWT_SECRET)
-    .update(signatureData)
-    .digest('hex');
-  const encodedSignature = base64UrlEncode(signature);
-  
-  return `${encodedHeader}.${encodedPayload}.${encodedSignature}`;
-}
-
-// JWT token verification
-export function verifyToken(token) {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    
-    const [encodedHeader, encodedPayload, encodedSignature] = parts;
-    
-    // Verify signature
-    const signatureData = `${encodedHeader}.${encodedPayload}`;
-    const expectedSignature = crypto
-      .createHmac('sha256', JWT_SECRET)
-      .update(signatureData)
-      .digest('hex');
-    const expectedEncodedSignature = base64UrlEncode(expectedSignature);
-    
-    if (encodedSignature !== expectedEncodedSignature) return null;
-    
-    // Decode payload
-    const payload = JSON.parse(base64UrlDecode(encodedPayload));
-    
-    // Check expiration
-    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
-    
-    return payload;
-  } catch (error) {
-    return null;
-  }
-}
-
-// Generate refresh token
-export function generateRefreshToken() {
-  return crypto.randomBytes(32).toString('hex');
-}
-
-// Store refresh token in database
-export function storeRefreshToken(userId, token) {
-  const stmt = db.prepare(`
-    INSERT INTO refresh_tokens (user_id, token, expires_at)
-    VALUES (?, ?, ?)
-  `);
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY).toISOString();
-  stmt.run(userId, token, expiresAt);
-}
-
-// Verify refresh token against database
-export function verifyRefreshToken(token) {
-  const stmt = db.prepare(`
-    SELECT user_id, expires_at FROM refresh_tokens
-    WHERE token = ? AND deleted_at IS NULL
-  `);
-  const result = stmt.get(token);
-  
-  if (!result) return null;
-  
-  // Check expiration
-  if (new Date(result.expires_at) < new Date()) {
-    return null;
-  }
-  
-  return result.user_id;
-}
-
-// Delete refresh token (logout)
-export function deleteRefreshToken(token) {
-  const stmt = db.prepare(`
-    UPDATE refresh_tokens SET deleted_at = ?
-    WHERE token = ?
-  `);
-  stmt.run(new Date().toISOString(), token);
-}
-
-// Clean expired refresh tokens
-export function cleanExpiredRefreshTokens() {
-  const stmt = db.prepare(`
-    DELETE FROM refresh_tokens
-    WHERE expires_at < ? OR deleted_at IS NOT NULL
-  `);
-  stmt.run(new Date().toISOString());
-}
-
-// Authentication middleware
-export function authenticate(req, res, next) {
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({
-      success: false,
-      error: 'No token provided'
+export const verifyPassword = async (password, hashedPassword) => {
+    const [salt, hash] = hashedPassword.split(':');
+    const derivedKey = await new Promise((resolve, reject) => {
+        crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+            if (err) reject(err);
+            else resolve(derivedKey);
+        });
     });
-  }
-  
-  const token = authHeader.substring(7);
-  const payload = verifyToken(token);
-  
-  if (!payload) {
-    return res.status(401).json({
-      success: false,
-      error: 'Invalid or expired token'
-    });
-  }
-  
-  // Attach user info to request
-  req.user = payload;
-  next();
-}
+    return derivedKey.toString('hex') === hash;
+};
 
-// Optional authentication (doesn't fail if no token)
-export function optionalAuth(req, res, next) {
-  const authHeader = req.headers.authorization;
-  
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7);
-    const payload = verifyToken(token);
-    if (payload) {
-      req.user = payload;
+const base64UrlEncode = (str) => {
+    return Buffer.from(str)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+};
+
+const base64UrlDecode = (str) => {
+    return Buffer.from(str + '='.repeat((4 - str.length % 4) % 4), 'base64').toString();
+};
+
+export const generateToken = (payload, expiresIn) => {
+    const header = { alg: 'HS256', typ: 'JWT' };
+    const now = Date.now();
+    const tokenPayload = {
+        ...payload,
+        iat: Math.floor(now / 1000),
+        exp: Math.floor((now + expiresIn) / 1000)
+    };
+
+    const encodedHeader = base64UrlEncode(JSON.stringify(header));
+    const encodedPayload = base64UrlEncode(JSON.stringify(tokenPayload));
+    const signatureInput = `${encodedHeader}.${encodedPayload}`;
+
+    const signature = crypto
+        .createHmac('sha256', JWT_SECRET)
+        .update(signatureInput)
+        .digest('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+
+    return `${signatureInput}.${signature}`;
+};
+
+export const verifyToken = (token) => {
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+            return { valid: false, error: 'Invalid token format' };
+        }
+
+        const [encodedHeader, encodedPayload, signature] = parts;
+        const signatureInput = `${encodedHeader}.${encodedPayload}`;
+
+        const expectedSignature = crypto
+            .createHmac('sha256', JWT_SECRET)
+            .update(signatureInput)
+            .digest('base64')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=/g, '');
+
+        if (signature !== expectedSignature) {
+            return { valid: false, error: 'Invalid signature' };
+        }
+
+        const payload = JSON.parse(base64UrlDecode(encodedPayload));
+
+        if (payload.exp < Math.floor(Date.now() / 1000)) {
+            return { valid: false, error: 'Token expired' };
+        }
+
+        return { valid: true, payload };
+    } catch (error) {
+        return { valid: false, error: error.message };
     }
-  }
-  
-  next();
-}
+};
 
-// Generate both access and refresh tokens
-export function generateAuthTokens(user) {
-  const payload = {
-    userId: user.id,
-    email: user.email
-  };
-  
-  const accessToken = generateToken(payload);
-  const refreshToken = generateRefreshToken();
-  
-  return { accessToken, refreshToken };
-}
+export const generateAuthTokens = (userId) => {
+    const accessToken = generateToken({ userId, type: 'access' }, JWT_ACCESS_EXPIRY);
+    const refreshToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + JWT_REFRESH_EXPIRY).toISOString();
+
+    const stmt = db.prepare(`
+        INSERT INTO refresh_tokens (user_id, token, expires_at)
+        VALUES (?, ?, ?)
+    `);
+    stmt.run(userId, refreshToken, expiresAt);
+
+    return { accessToken, refreshToken };
+};
+
+export const refreshAccessToken = (refreshToken) => {
+    const stmt = db.prepare(`
+        SELECT rt.*, u.id as user_id, u.email
+        FROM refresh_tokens rt
+        JOIN users u ON rt.user_id = u.id
+        WHERE rt.token = ? AND rt.expires_at > datetime('now')
+    `);
+    const tokenRecord = stmt.get(refreshToken);
+
+    if (!tokenRecord) {
+        return { success: false, error: 'Invalid or expired refresh token' };
+    }
+
+    const accessToken = generateToken({ userId: tokenRecord.user_id, type: 'access' }, JWT_ACCESS_EXPIRY);
+
+    return { success: true, accessToken };
+};
+
+export const revokeRefreshToken = (refreshToken) => {
+    const stmt = db.prepare('DELETE FROM refresh_tokens WHERE token = ?');
+    stmt.run(refreshToken);
+};
+
+export const revokeAllUserTokens = (userId) => {
+    const stmt = db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?');
+    stmt.run(userId);
+};
+
+export const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ success: false, error: 'Access token required' });
+    }
+
+    const result = verifyToken(token);
+
+    if (!result.valid) {
+        return res.status(403).json({ success: false, error: result.error });
+    }
+
+    if (result.payload.type !== 'access') {
+        return res.status(403).json({ success: false, error: 'Invalid token type' });
+    }
+
+    req.userId = result.payload.userId;
+    next();
+};
+
+export const optionalAuth = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token) {
+        const result = verifyToken(token);
+        if (result.valid && result.payload.type === 'access') {
+            req.userId = result.payload.userId;
+        }
+    }
+    next();
+};

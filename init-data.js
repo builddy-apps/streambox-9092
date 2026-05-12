@@ -1,489 +1,870 @@
-import Database from 'better-sqlite3';
-import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import Database from 'better-sqlite3';
+import { fileURLToPath } from 'url';
 
-// Ensure data directory exists
-if (!fs.existsSync('./data')) {
-  fs.mkdirSync('./data', { recursive: true });
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const dataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const db = new Database('./data/app.db');
+const db = new Database(path.join(dataDir, 'app.db'));
 db.pragma('journal_mode = WAL');
+
+// Create tables
+db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        name TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS content (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        poster_url TEXT,
+        backdrop_url TEXT,
+        year INTEGER,
+        rating REAL,
+        quality TEXT,
+        genres TEXT,
+        duration INTEGER,
+        video_url TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS seasons (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content_id INTEGER NOT NULL,
+        season_number INTEGER NOT NULL,
+        title TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS episodes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content_id INTEGER NOT NULL,
+        season_id INTEGER,
+        episode_number INTEGER NOT NULL,
+        title TEXT,
+        video_url TEXT,
+        duration INTEGER,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
+        FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS favorites (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        content_id INTEGER NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS watch_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        content_id INTEGER NOT NULL,
+        episode_id INTEGER,
+        progress_seconds INTEGER DEFAULT 0,
+        duration_seconds INTEGER,
+        last_watched_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
+        FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS extensions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        description TEXT,
+        enabled INTEGER DEFAULT 0,
+        version TEXT,
+        config_json TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+`);
 
 // Check if data already seeded
 const count = db.prepare('SELECT COUNT(*) as count FROM content').get();
 if (count.count > 0) {
-  console.log('Data already seeded, skipping...');
-  db.close();
-  process.exit(0);
+    console.log('Data already seeded, skipping...');
+    process.exit(0);
 }
 
-// Password hashing helper
-const hashPassword = (pwd) => {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(pwd, salt, 64).toString('hex');
-  return salt + ':' + hash;
-};
+// Helper function to hash passwords
+function hashPassword(password) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+    return salt + ':' + hash;
+}
 
-// Date helper - get ISO string for N days ago
-const daysAgo = (days) => new Date(Date.now() - days * 86400000).toISOString();
+// Prepare statements
+const insertUser = db.prepare(`
+    INSERT INTO users (email, password_hash, name, created_at) 
+    VALUES (?, ?, ?, ?)
+`);
 
-// Insert all data in a transaction
-const seedAll = db.transaction(() => {
-  // ============ USERS ============
-  const insertUser = db.prepare('INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)');
-  
-  const users = [
-    { email: 'admin@streambox.app', password: 'admin123', created: daysAgo(30) },
-    { email: 'demo@streambox.app', password: 'password123', created: daysAgo(25) },
-    { email: 'maria.rossi@email.com', password: 'maria2024', created: daysAgo(15) }
-  ];
-  
-  users.forEach(u => {
-    insertUser.run(u.email, hashPassword(u.password), u.created);
-  });
-  
-  const adminUser = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@streambox.app');
-  const demoUser = db.prepare('SELECT id FROM users WHERE email = ?').get('demo@streambox.app');
-  const mariaUser = db.prepare('SELECT id FROM users WHERE email = ?').get('maria.rossi@email.com');
+const insertContent = db.prepare(`
+    INSERT INTO content (type, title, description, poster_url, backdrop_url, year, rating, quality, genres, duration, video_url, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
 
-  // ============ CONTENT ============
-  const insertContent = db.prepare(`
-    INSERT INTO content (type, title, poster_url, backdrop_url, description, rating, year, genres, quality, duration, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+const insertSeason = db.prepare(`
+    INSERT INTO seasons (content_id, season_number, title, created_at)
+    VALUES (?, ?, ?, ?)
+`);
 
-  const contentData = [
-    // Movies
-    {
-      type: 'movie', title: 'Inception',
-      poster_url: 'https://image.tmdb.org/t/p/w500/9gk7admal4zl67YrxIo2AO08qX8.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/s3TBrRGB1iav7gFOCNx3H31MoES.jpg',
-      description: 'A thief who steals corporate secrets through dream-sharing technology is given the inverse task of planting an idea into the mind of a C.E.O.',
-      rating: 8.8, year: 2010, genres: '["Sci-Fi", "Azione", "Thriller"]', quality: '4K', duration: 8880
-    },
-    {
-      type: 'movie', title: 'Interstellar',
-      poster_url: 'https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/xJHokMbljvjADYdit5fK5VQsXEG.jpg',
-      description: 'A team of explorers travel through a wormhole in space in an attempt to ensure humanity\'s survival as Earth becomes uninhabitable.',
-      rating: 8.6, year: 2014, genres: '["Avventura", "Dramma", "Sci-Fi"]', quality: '4K', duration: 10140
-    },
-    {
-      type: 'movie', title: 'The Dark Knight',
-      poster_url: 'https://image.tmdb.org/t/p/w500/qJ2tW6WMUDux911BTUgMe1nSNmO.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/nMKdUUepR0i5zn0y1T4CsSB5ez.jpg',
-      description: 'When the menace known as the Joker wreaks havoc and chaos on Gotham, Batman must accept one of the greatest psychological tests of his ability to fight injustice.',
-      rating: 9.0, year: 2008, genres: '["Azione", "Crimine", "Dramma"]', quality: 'HD', duration: 9120
-    },
-    {
-      type: 'movie', title: 'Pulp Fiction',
-      poster_url: 'https://image.tmdb.org/t/p/w500/d5iIlFn5s0ImszYzBPb8JPIfbXD.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/9jR28Hij0d1JMceleYpKFFq7JmI.jpg',
-      description: 'The lives of two mob hitmen, a boxer, a gangster and his wife, and a pair of diner bandits intertwine in four tales of violence and redemption.',
-      rating: 8.9, year: 1994, genres: '["Crimine", "Dramma"]', quality: 'HD', duration: 9480
-    },
-    {
-      type: 'movie', title: 'Parasite',
-      poster_url: 'https://image.tmdb.org/t/p/w500/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/TU9NIjwzjoKPwQHoHshkFcQUCG8.jpg',
-      description: 'Greed and class discrimination threaten the newly formed symbiotic relationship between the wealthy Park family and the destitute Kim clan.',
-      rating: 8.5, year: 2019, genres: '["Commedia", "Thriller", "Dramma"]', quality: '4K', duration: 7680
-    },
-    {
-      type: 'movie', title: 'Blade Runner 2049',
-      poster_url: 'https://image.tmdb.org/t/p/w500/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/sAtoMqDVhNDQBc3QJL3RF6hlhGq.jpg',
-      description: 'Young Blade Runner K\'s discovery of a long-buried secret leads him to track down former Blade Runner Rick Deckard, who\'s been missing for thirty years.',
-      rating: 7.6, year: 2017, genres: '["Azione", "Dramma", "Sci-Fi"]', quality: '4K', duration: 10080
-    },
-    // Series
-    {
-      type: 'series', title: 'Breaking Bad',
-      poster_url: 'https://image.tmdb.org/t/p/w500/ggFHVNu6YYI5L9pCfOacjizRGt.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/tsRy63Mu5cu8etL1X7ZLyf7UP1M.jpg',
-      description: 'A high school chemistry teacher diagnosed with lung cancer turns to manufacturing and selling methamphetamine with a former student to secure his family\'s future.',
-      rating: 9.5, year: 2008, genres: '["Crimine", "Dramma", "Thriller"]', quality: 'HD', duration: 2700
-    },
-    {
-      type: 'series', title: 'Stranger Things',
-      poster_url: 'https://image.tmdb.org/t/p/w49/RMreaIOfMlFqC29HSEfP3PM0Co.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/ekpMEKqLG734Fu8S7djWqAVk7e3.jpg',
-      description: 'When a young boy disappears, his mother, a police chief, and his friends must confront terrifying supernatural forces in order to get him back.',
-      rating: 8.7, year: 2016, genres: '["Dramma", "Fantasy", "Horror"]', quality: '4K', duration: 3000
-    },
-    {
-      type: 'series', title: 'The Crown',
-      poster_url: 'https://image.tmdb.org/t/p/w500/ryfmL3KWJlAjxqIsjoMeS4N6WHh.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/6mYS2iJ7J2IkMT6slDvY7iCztAF.jpg',
-      description: 'Follows the political rivalries and romance of Queen Elizabeth II\'s reign and the events that shaped the second half of the twentieth century.',
-      rating: 8.6, year: 2016, genres: '["Dramma", "Storia"]', quality: 'HD', duration: 3600
-    },
-    {
-      type: 'series', title: 'Peaky Blinders',
-      poster_url: 'https://image.tmdb.org/t/p/w500/vUUqzWaQS0GFwxsoowRfefBPZ2d.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/b7VNL3gMBe1GMs66Y5l8XhXBG5j.jpg',
-      description: 'A gangster family epic set in 1900s England, centered on a gang who sew razor blades in the peaks of their caps, and their fierce boss Tommy Shelby.',
-      rating: 8.8, year: 2013, genres: '["Crimine", "Dramma"]', quality: 'HD', duration: 3600
-    },
-    {
-      type: 'series', title: 'The Mandalorian',
-      poster_url: 'https://image.tmdb.org/t/p/w500/sWgxBvVcyPjO9UeS2i3Cx3vqJzu.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/9ijMGlJKqcslswW5z9Kg4Mf9gP5.jpg',
-      description: 'A lone gunfighter makes his way through the galaxy in the era after the fall of the Empire.',
-      rating: 8.3, year: 2019, genres: '["Azione", "Avventura", "Sci-Fi"]', quality: '4K', duration: 2400
-    },
-    // Anime
-    {
-      type: 'anime', title: 'Attack on Titan',
-      poster_url: 'https://image.tmdb.org/t/p/w500/hTP1DtLGFamjfu8WqjnuQdP1n4i.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/8cHZ3we8b1pjM2eLq53Jk1JRnvD.jpg',
-      description: 'After his hometown is destroyed and his mother is killed, young Eren Jaeger vows to cleanse the earth of the giant humanoid Titans that have brought humanity to the brink of extinction.',
-      rating: 9.0, year: 2013, genres: '["Animazione", "Azione", "Avventura"]', quality: 'HD', duration: 1440
-    },
-    {
-      type: 'anime', title: 'Death Note',
-      poster_url: 'https://image.tmdb.org/t/p/w500/npOnUDZadGZzXKVDqE8eloNqCeO.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/jHKn3theMl6BxPgJ7EgBeVeDlS.jpg',
-      description: 'An intelligent high school student goes on a secret crusade to eliminate criminals from the world after discovering a notebook capable of killing anyone whose name is written into it.',
-      rating: 8.9, year: 2006, genres: '["Animazione", "Crimine", "Thriller"]', quality: 'HD', duration: 1380
-    },
-    {
-      type: 'anime', title: 'One Piece',
-      poster_url: 'https://image.tmdb.org/t/p/w500/cMD9Ygz11zjJzAovURpO75Qg7rT.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/nPp5Rm97HSbMZ5jInNXq6Iv147m.jpg',
-      description: 'Monkey D. Luffy sets off on an adventure with his pirate crew in hopes of finding the greatest treasure ever, known as "One Piece."',
-      rating: 8.7, year: 1999, genres: '["Animazione", "Azione", "Avventura"]', quality: 'SD', duration: 1440
-    },
-    {
-      type: 'anime', title: 'Demon Slayer',
-      poster_url: 'https://image.tmdb.org/t/p/w500/wrCwH6WOvXQvVuqBBKsUiIcwmJ4.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/xUfRdRjZhrqGQS3Y53GmPmoh1m0.jpg',
-      description: 'A young boy becomes a demon slayer after his family is slaughtered and his sister is turned into a demon, seeking a cure for her condition.',
-      rating: 8.6, year: 2019, genres: '["Animazione", "Azione", "Fantasy"]', quality: '4K', duration: 1380
-    },
-    {
-      type: 'anime', title: 'Fullmetal Alchemist: Brotherhood',
-      poster_url: 'https://image.tmdb.org/t/p/w500/93A50dB3AdHp0Lcp9JDFqff7KS.jpg',
-      backdrop_url: 'https://image.tmdb.org/t/p/original/8KdHdO5XQmW7JxXpVKcNQnDhDxE.jpg',
-      description: 'Two brothers search for a Philosopher\'s Stone after an unsuccessful attempt to revive their deceased mother through alchemy leaves them in damaged physical form.',
-      rating: 9.1, year: 2009, genres: '["Animazione", "Azione", "Avventura"]', quality: 'HD', duration: 1440
-    }
-  ];
-
-  contentData.forEach((c, i) => {
-    insertContent.run(
-      c.type, c.title, c.poster_url, c.backdrop_url, c.description,
-      c.rating, c.year, c.genres, c.quality, c.duration, daysAgo(28 - i * 1.5)
-    );
-  });
-
-  // ============ SEASONS & EPISODES ============
-  const insertSeason = db.prepare('INSERT INTO seasons (content_id, season_number, title, created_at) VALUES (?, ?, ?, ?)');
-  const insertEpisode = db.prepare('INSERT INTO episodes (season_id, episode_number, title, duration, video_url, thumbnail_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
-
-  // Breaking Bad - 2 seasons
-  const bbContent = db.prepare('SELECT id FROM content WHERE title = ?').get('Breaking Bad');
-  if (bbContent) {
-    const bbS1 = insertSeason.run(bbContent.id, 1, 'Season 1', daysAgo(25));
-    const bbS2 = insertSeason.run(bbContent.id, 2, 'Season 2', daysAgo(24));
-
-    const bbEpisodes = [
-      { season_id: bbS1.lastInsertRowid, episodes: ['Pilot', 'Cat\'s in the Bag...', 'And the Bag\'s in the River', 'Cancer Man'] },
-      { season_id: bbS2.lastInsertRowid, episodes: ['Seven Thirty-Seven', 'Grilled', 'Bit by a Dead Bee', 'Down'] }
-    ];
-
-    bbEpisodes.forEach(s => {
-      s.episodes.forEach((title, i) => {
-        insertEpisode.run(s.season_id, i + 1, title, 2700, `https://cdn.streambox.app/bb/s${bbEpisodes.indexOf(s) + 1}e${i + 1}.mp4`, `https://cdn.streambox.app/bb/thumb/s${bbEpisodes.indexOf(s) + 1}e${i + 1}.jpg`, daysAgo(24 - i * 0.5));
-      });
-    });
-  }
-
-  // Stranger Things - 2 seasons
-  const stContent = db.prepare('SELECT id FROM content WHERE title = ?').get('Stranger Things');
-  if (stContent) {
-    const stS1 = insertSeason.run(stContent.id, 1, 'Season 1', daysAgo(22));
-    const stS2 = insertSeason.run(stContent.id, 2, 'Season 2', daysAgo(21));
-
-    const stEpisodes = [
-      { season_id: stS1.lastInsertRowid, episodes: ['The Vanishing of Will Byers', 'The Weirdo on Maple Street', 'Holly, Jolly', 'The Body'] },
-      { season_id: stS2.lastInsertRowid, episodes: ['MADMAX', 'Trick or Treat, Freak', 'The Pollywog', 'Will the Wise'] }
-    ];
-
-    stEpisodes.forEach(s => {
-      s.episodes.forEach((title, i) => {
-        insertEpisode.run(s.season_id, i + 1, title, 3000, `https://cdn.streambox.app/st/s${stEpisodes.indexOf(s) + 1}e${i + 1}.mp4`, `https://cdn.streambox.app/st/thumb/s${stEpisodes.indexOf(s) + 1}e${i + 1}.jpg`, daysAgo(21 - i * 0.5));
-      });
-    });
-  }
-
-  // The Crown - 2 seasons
-  const crownContent = db.prepare('SELECT id FROM content WHERE title = ?').get('The Crown');
-  if (crownContent) {
-    const crownS1 = insertSeason.run(crownContent.id, 1, 'Season 1', daysAgo(20));
-    const crownS2 = insertSeason.run(crownContent.id, 2, 'Season 2', daysAgo(19));
-
-    const crownEpisodes = [
-      { season_id: crownS1.lastInsertRowid, episodes: ['Wolferton Splash', 'Hyde Park Corner', 'Windsor', 'Act of God'] },
-      { season_id: crownS2.lastInsertRowid, episodes: ['Misadventure', 'A Company of Men', 'Lisbon', 'Beryl'] }
-    ];
-
-    crownEpisodes.forEach(s => {
-      s.episodes.forEach((title, i) => {
-        insertEpisode.run(s.season_id, i + 1, title, 3600, `https://cdn.streambox.app/crown/s${crownEpisodes.indexOf(s) + 1}e${i + 1}.mp4`, `https://cdn.streambox.app/crown/thumb/s${crownEpisodes.indexOf(s) + 1}e${i + 1}.jpg`, daysAgo(19 - i * 0.5));
-      });
-    });
-  }
-
-  // Peaky Blinders - 2 seasons
-  const pbContent = db.prepare('SELECT id FROM content WHERE title = ?').get('Peaky Blinders');
-  if (pbContent) {
-    const pbS1 = insertSeason.run(pbContent.id, 1, 'Season 1', daysAgo(18));
-    const pbS2 = insertSeason.run(pbContent.id, 2, 'Season 2', daysAgo(17));
-
-    const pbEpisodes = [
-      { season_id: pbS1.lastInsertRowid, episodes: ['Episode 1', 'Episode 2', 'Episode 3', 'Episode 4'] },
-      { season_id: pbS2.lastInsertRowid, episodes: ['Episode 1', 'Episode 2', 'Episode 3', 'Episode 4'] }
-    ];
-
-    pbEpisodes.forEach(s => {
-      s.episodes.forEach((title, i) => {
-        insertEpisode.run(s.season_id, i + 1, title, 3600, `https://cdn.streambox.app/pb/s${pbEpisodes.indexOf(s) + 1}e${i + 1}.mp4`, `https://cdn.streambox.app/pb/thumb/s${pbEpisodes.indexOf(s) + 1}e${i + 1}.jpg`, daysAgo(17 - i * 0.5));
-      });
-    });
-  }
-
-  // The Mandalorian - 2 seasons
-  const mandoContent = db.prepare('SELECT id FROM content WHERE title = ?').get('The Mandalorian');
-  if (mandoContent) {
-    const mandoS1 = insertSeason.run(mandoContent.id, 1, 'Season 1', daysAgo(16));
-    const mandoS2 = insertSeason.run(mandoContent.id, 2, 'Season 2', daysAgo(15));
-
-    const mandoEpisodes = [
-      { season_id: mandoS1.lastInsertRowid, episodes: ['Chapter 1: The Mandalorian', 'Chapter 2: The Child', 'Chapter 3: The Sin', 'Chapter 4: Sanctuary'] },
-      { season_id: mandoS2.lastInsertRowid, episodes: ['Chapter 9: The Marshal', 'Chapter 10: The Passenger', 'Chapter 11: The Heiress', 'Chapter 12: The Siege'] }
-    ];
-
-    mandoEpisodes.forEach(s => {
-      s.episodes.forEach((title, i) => {
-        insertEpisode.run(s.season_id, i + 1, title, 2400, `https://cdn.streambox.app/mando/s${mandoEpisodes.indexOf(s) + 1}e${i + 1}.mp4`, `https://cdn.streambox.app/mando/thumb/s${mandoEpisodes.indexOf(s) + 1}e${i + 1}.jpg`, daysAgo(15 - i * 0.5));
-      });
-    });
-  }
-
-  // Attack on Titan - 2 seasons
-  const aotContent = db.prepare('SELECT id FROM content WHERE title = ?').get('Attack on Titan');
-  if (aotContent) {
-    const aotS1 = insertSeason.run(aotContent.id, 1, 'Season 1', daysAgo(14));
-    const aotS2 = insertSeason.run(aotContent.id, 2, 'Season 2', daysAgo(13));
-
-    const aotEpisodes = [
-      { season_id: aotS1.lastInsertRowid, episodes: ['To You, in 2000 Years', 'That Day', 'A Dim Light Amid Despair', 'The Night of the Closing Ceremony'] },
-      { season_id: aotS2.lastInsertRowid, episodes: ['Beast Titan', 'I\'m Home', 'Southwestward', 'Soldier'] }
-    ];
-
-    aotEpisodes.forEach(s => {
-      s.episodes.forEach((title, i) => {
-        insertEpisode.run(s.season_id, i + 1, title, 1440, `https://cdn.streambox.app/aot/s${aotEpisodes.indexOf(s) + 1}e${i + 1}.mp4`, `https://cdn.streambox.app/aot/thumb/s${aotEpisodes.indexOf(s) + 1}e${i + 1}.jpg`, daysAgo(13 - i * 0.5));
-      });
-    });
-  }
-
-  // Death Note - 1 season
-  const dnContent = db.prepare('SELECT id FROM content WHERE title = ?').get('Death Note');
-  if (dnContent) {
-    const dnS1 = insertSeason.run(dnContent.id, 1, 'Season 1', daysAgo(12));
-
-    const dnEpisodes = ['Rebirth', 'Confrontation', 'Dealings', 'Pursuit'];
-    dnEpisodes.forEach((title, i) => {
-      insertEpisode.run(dnS1.lastInsertRowid, i + 1, title, 1380, `https://cdn.streambox.app/dn/s1e${i + 1}.mp4`, `https://cdn.streambox.app/dn/thumb/s1e${i + 1}.jpg`, daysAgo(12 - i * 0.5));
-    });
-  }
-
-  // One Piece - 2 seasons
-  const opContent = db.prepare('SELECT id FROM content WHERE title = ?').get('One Piece');
-  if (opContent) {
-    const opS1 = insertSeason.run(opContent.id, 1, 'East Blue', daysAgo(11));
-    const opS2 = insertSeason.run(opContent.id, 2, 'Alabasta', daysAgo(10));
-
-    const opEpisodes = [
-      { season_id: opS1.lastInsertRowid, episodes: ['I\'m Luffy! The Man Who\'s Gonna Be King of the Pirates!', 'Enter the Great Swordsman! Pirate Hunter Roronoa Zoro!', 'Morgan Versus Luffy', 'Luffy\'s Past'] },
-      { season_id: opS2.lastInsertRowid, episodes: ['Entering the Desert', 'The Sand Tempest', 'A Farewell to Arms', 'Reunion'] }
-    ];
-
-    opEpisodes.forEach(s => {
-      s.episodes.forEach((title, i) => {
-        insertEpisode.run(s.season_id, i + 1, title, 1440, `https://cdn.streambox.app/op/s${opEpisodes.indexOf(s) + 1}e${i + 1}.mp4`, `https://cdn.streambox.app/op/thumb/s${opEpisodes.indexOf(s) + 1}e${i + 1}.jpg`, daysAgo(10 - i * 0.5));
-      });
-    });
-  }
-
-  // Demon Slayer - 1 season
-  const dsContent = db.prepare('SELECT id FROM content WHERE title = ?').get('Demon Slayer');
-  if (dsContent) {
-    const dsS1 = insertSeason.run(dsContent.id, 1, 'Season 1', daysAgo(9));
-
-    const dsEpisodes = ['Cruelty', 'Trainer Sakonji Urokodaki', 'Sabito and Makomo', 'Final Selection'];
-    dsEpisodes.forEach((title, i) => {
-      insertEpisode.run(dsS1.lastInsertRowid, i + 1, title, 1380, `https://cdn.streambox.app/ds/s1e${i + 1}.mp4`, `https://cdn.streambox.app/ds/thumb/s1e${i + 1}.jpg`, daysAgo(9 - i * 0.5));
-    });
-  }
-
-  // Fullmetal Alchemist: Brotherhood - 1 season
-  const fmaContent = db.prepare('SELECT id FROM content WHERE title = ?').get('Fullmetal Alchemist: Brotherhood');
-  if (fmaContent) {
-    const fmaS1 = insertSeason.run(fmaContent.id, 1, 'Season 1', daysAgo(8));
-
-    const fmaEpisodes = ['Fullmetal Alchemist', 'The First Day', 'City of Heresy', 'An Alchemist\'s Anguish'];
-    fmaEpisodes.forEach((title, i) => {
-      insertEpisode.run(fmaS1.lastInsertRowid, i + 1, title, 1440, `https://cdn.streambox.app/fma/s1e${i + 1}.mp4`, `https://cdn.streambox.app/fma/thumb/s1e${i + 1}.jpg`, daysAgo(8 - i * 0.5));
-    });
-  }
-
-  // ============ EXTENSIONS ============
-  const insertExtension = db.prepare('INSERT INTO extensions (name, description, url, enabled, created_at) VALUES (?, ?, ?, ?, ?)');
-
-  const extensions = [
-    { name: 'OpenSubtitles', desc: 'Community-driven subtitle provider with support for 50+ languages', url: 'https://api.opensubtitles.org', enabled: 1 },
-    { name: 'TMDB Metadata', desc: 'The Movie Database integration for posters, backdrops, and detailed metadata', url: 'https://api.themoviedb.org', enabled: 1 },
-    { name: 'StreamSource Alpha', desc: 'Primary video content delivery network with adaptive bitrate streaming', url: 'https://alpha.streamsource.net', enabled: 1 },
-    { name: 'StreamSource Beta', desc: 'Backup video source with regional CDN for faster loading times', url: 'https://beta.streamsource.net', enabled: 0 },
-    { name: 'SubDL', desc: 'Alternative subtitle source with extensive anime subtitle collection', url: 'https://api.subdl.com', enabled: 1 },
-    { name: 'TVDB', desc: 'TheTVDB integration for episode guides and series metadata', url: 'https://api.thetvdb.com', enabled: 0 }
-  ];
-
-  extensions.forEach((ex, i) => {
-    insertExtension.run(ex.name, ex.desc, ex.url, ex.enabled, daysAgo(27 - i));
-  });
-
-  // ============ FAVORITES ============
-  const insertFavorite = db.prepare('INSERT OR IGNORE INTO favorites (user_id, content_id, created_at) VALUES (?, ?, ?)');
-
-  // Admin favorites
-  const inceptionContent = db.prepare('SELECT id FROM content WHERE title = ?').get('Inception');
-  const darkKnightContent = db.prepare('SELECT id FROM content WHERE title = ?').get('The Dark Knight');
-  const interstellarContent = db.prepare('SELECT id FROM content WHERE title = ?').get('Interstellar');
-
-  if (adminUser && inceptionContent) insertFavorite.run(adminUser.id, inceptionContent.id, daysAgo(20));
-  if (adminUser && darkKnightContent) insertFavorite.run(adminUser.id, darkKnightContent.id, daysAgo(18));
-  if (adminUser && interstellarContent) insertFavorite.run(adminUser.id, interstellarContent.id, daysAgo(15));
-
-  // Demo user favorites
-  const bbFav = db.prepare('SELECT id FROM content WHERE title = ?').get('Breaking Bad');
-  const aotFav = db.prepare('SELECT id FROM content WHERE title = ?').get('Attack on Titan');
-  const parasiteContent = db.prepare('SELECT id FROM content WHERE title = ?').get('Parasite');
-  const strangerThingsFav = db.prepare('SELECT id FROM content WHERE title = ?').get('Stranger Things');
-
-  if (demoUser && bbFav) insertFavorite.run(demoUser.id, bbFav.id, daysAgo(22));
-  if (demoUser && aotFav) insertFavorite.run(demoUser.id, aotFav.id, daysAgo(19));
-  if (demoUser && parasiteContent) insertFavorite.run(demoUser.id, parasiteContent.id, daysAgo(12));
-  if (demoUser && strangerThingsFav) insertFavorite.run(demoUser.id, strangerThingsFav.id, daysAgo(8));
-
-  // Maria favorites
-  const deathNoteFav = db.prepare('SELECT id FROM content WHERE title = ?').get('Death Note');
-  const demonSlayerFav = db.prepare('SELECT id FROM content WHERE title = ?').get('Demon Slayer');
-  const crownFav = db.prepare('SELECT id FROM content WHERE title = ?').get('The Crown');
-  const pulpFictionFav = db.prepare('SELECT id FROM content WHERE title = ?').get('Pulp Fiction');
-
-  if (mariaUser && deathNoteFav) insertFavorite.run(mariaUser.id, deathNoteFav.id, daysAgo(13));
-  if (mariaUser && demonSlayerFav) insertFavorite.run(mariaUser.id, demonSlayerFav.id, daysAgo(10));
-  if (mariaUser && crownFav) insertFavorite.run(mariaUser.id, crownFav.id, daysAgo(7));
-  if (mariaUser && pulpFictionFav) insertFavorite.run(mariaUser.id, pulpFictionFav.id, daysAgo(4));
-
-  // ============ WATCH HISTORY ============
-  const insertHistory = db.prepare(`
-    INSERT INTO watch_history (user_id, content_id, episode_id, progress, duration, last_watched_at, completed)
+const insertEpisode = db.prepare(`
+    INSERT INTO episodes (content_id, season_id, episode_number, title, video_url, duration, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
+`);
 
-  // Helper to get episode
-  const getEpisode = (contentTitle, seasonNum, epNum) => {
-    return db.prepare(`
-      SELECT e.id FROM episodes e
-      JOIN seasons s ON e.season_id = s.id
-      JOIN content c ON s.content_id = c.id
-      WHERE c.title = ? AND s.season_number = ? AND e.episode_number = ?
-    `).get(contentTitle, seasonNum, epNum);
-  };
+const insertFavorite = db.prepare(`
+    INSERT INTO favorites (user_id, content_id, created_at)
+    VALUES (?, ?, ?)
+`);
 
-  // Admin watch history - movies
-  if (adminUser && inceptionContent) {
-    insertHistory.run(adminUser.id, inceptionContent.id, null, 8880, 8880, daysAgo(18), 1); // Completed
-  }
-  if (adminUser && interstellarContent) {
-    insertHistory.run(adminUser.id, interstellarContent.id, null, 5670, 10140, daysAgo(5), 0); // In progress
-  }
+const insertWatchHistory = db.prepare(`
+    INSERT INTO watch_history (user_id, content_id, episode_id, progress_seconds, duration_seconds, last_watched_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+`);
 
-  // Demo user watch history - series
-  if (demoUser && bbContent) {
-    const bbEp1 = getEpisode('Breaking Bad', 1, 1);
-    const bbEp2 = getEpisode('Breaking Bad', 1, 2);
-    const bbEp3 = getEpisode('Breaking Bad', 1, 3);
+const insertExtension = db.prepare(`
+    INSERT INTO extensions (name, description, enabled, version, config_json, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+`);
 
-    if (bbEp1) insertHistory.run(demoUser.id, bbContent.id, bbEp1.id, 2700, 2700, daysAgo(14), 1);
-    if (bbEp2) insertHistory.run(demoUser.id, bbContent.id, bbEp2.id, 2700, 2700, daysAgo(12), 1);
-    if (bbEp3) insertHistory.run(demoUser.id, bbContent.id, bbEp3.id, 1800, 2700, daysAgo(2), 0); // Currently watching
-  }
-
-  if (demoUser && strangerThingsFav) {
-    const stEp1 = getEpisode('Stranger Things', 1, 1);
-    const stEp2 = getEpisode('Stranger Things', 1, 2);
-
-    if (stEp1) insertHistory.run(demoUser.id, strangerThingsFav.id, stEp1.id, 3000, 3000, daysAgo(10), 1);
-    if (stEp2) insertHistory.run(demoUser.id, strangerThingsFav.id, stEp2.id, 2100, 3000, daysAgo(3), 0);
-  }
-
-  // Demo user - anime
-  if (demoUser && aotFav) {
-    const aotEp1 = getEpisode('Attack on Titan', 1, 1);
-    if (aotEp1) insertHistory.run(demoUser.id, aotFav.id, aotEp1.id, 1440, 1440, daysAgo(7), 1);
-  }
-
-  // Maria watch history
-  if (mariaUser && deathNoteFav) {
-    const dnEp1 = getEpisode('Death Note', 1, 1);
-    const dnEp2 = getEpisode('Death Note', 1, 2);
-
-    if (dnEp1) insertHistory.run(mariaUser.id, deathNoteFav.id, dnEp1.id, 1380, 1380, daysAgo(9), 1);
-    if (dnEp2) insertHistory.run(mariaUser.id, deathNoteFav.id, dnEp2.id, 900, 1380, daysAgo(1), 0);
-  }
-
-  if (mariaUser && demonSlayerFav) {
-    const dsEp1 = getEpisode('Demon Slayer', 1, 1);
-    if (dsEp1) insertHistory.run(mariaUser.id, demonSlayerFav.id, dsEp1.id, 1380, 1380, daysAgo(6), 1);
-  }
-
-  if (mariaUser && parasiteContent) {
-    insertHistory.run(mariaUser.id, parasiteContent.id, null, 7680, 7680, daysAgo(4), 1);
-  }
-
-  // ============ SUBTITLES ============
-  const insertSubtitle = db.prepare('INSERT INTO subtitles (episode_id, language, url, created_at) VALUES (?, ?, ?, ?)');
-
-  // Add subtitles for some episodes
-  const episodesForSubs = db.prepare('SELECT id FROM episodes LIMIT 20').all();
-  const languages = ['English', 'Italiano', 'Español', 'Français'];
-
-  episodesForSubs.forEach((ep, i) => {
-    // Each episode gets 2-3 subtitle tracks
-    const langs = languages.slice(0, 2 + (i % 2));
-    langs.forEach((lang, j) => {
-      const langCode = { 'English': 'en', 'Italiano': 'it', 'Español': 'es', 'Français': 'fr' }[lang];
-      insertSubtitle.run(
-        ep.id,
-        lang,
-        `https://cdn.streambox.app/subs/${langCode}/ep${ep.id}.vtt`,
-        daysAgo(20 - i * 0.8)
-      );
-    });
-  });
+const seedAll = db.transaction(() => {
+    const now = Date.now();
+    const day = 86400000;
+    
+    // ============================================
+    // USERS
+    // ============================================
+    const users = [
+        {
+            email: 'admin@streambox.com',
+            password: hashPassword('password123'),
+            name: 'Alex Morgan',
+            created_at: new Date(now - 25 * day).toISOString()
+        },
+        {
+            email: 'demo@streambox.com',
+            password: hashPassword('password123'),
+            name: 'Jordan Lee',
+            created_at: new Date(now - 20 * day).toISOString()
+        },
+        {
+            email: 'sarah.chen@email.com',
+            password: hashPassword('password123'),
+            name: 'Sarah Chen',
+            created_at: new Date(now - 15 * day).toISOString()
+        }
+    ];
+    
+    const userIds = [];
+    for (const u of users) {
+        const result = insertUser.run(u.email, u.password, u.name, u.created_at);
+        userIds.push(result.lastInsertRowid);
+    }
+    
+    // ============================================
+    // CONTENT - MOVIES
+    // ============================================
+    const movies = [
+        {
+            type: 'movie',
+            title: 'Cyber Chronicles',
+            description: 'In a neon-soaked dystopian future, a rogue hacker discovers a conspiracy that threatens to control the minds of every citizen connected to the neural network. With time running out, she must navigate the dangerous underworld of mega-corporations to expose the truth.',
+            poster_url: 'https://images.unsplash.com/photo-1534809027769-b00d750a6bac?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1534809027769-b00d750a6bac?w=1920',
+            year: 2024,
+            rating: 8.5,
+            quality: '4K',
+            genres: 'Sci-Fi,Action',
+            duration: 7340,
+            video_url: '/videos/cyber-chronicles.mp4',
+            created_at: new Date(now - 28 * day).toISOString()
+        },
+        {
+            type: 'movie',
+            title: 'The Last Horizon',
+            description: 'Commander Elena Vasquez leads the first interstellar mission beyond our galaxy, only to discover that the edge of the universe holds secrets that could either save humanity or doom it forever. A visually stunning space opera about sacrifice and discovery.',
+            poster_url: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=1920',
+            year: 2023,
+            rating: 9.0,
+            quality: '4K',
+            genres: 'Sci-Fi,Drama',
+            duration: 8520,
+            video_url: '/videos/last-horizon.mp4',
+            created_at: new Date(now - 25 * day).toISOString()
+        },
+        {
+            type: 'movie',
+            title: 'Shadow Protocol',
+            description: 'When a deep-cover agent is burned by their own agency, they must rely on old contacts and forgotten skills to unravel a conspiracy that reaches the highest levels of government. A tense spy thriller with twists at every corner.',
+            poster_url: 'https://images.unsplash.com/photo-1533104816931-20fa691ff6ca?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1533104816931-20fa691ff6ca?w=1920',
+            year: 2022,
+            rating: 7.8,
+            quality: 'HD',
+            genres: 'Action,Thriller',
+            duration: 6780,
+            video_url: '/videos/shadow-protocol.mp4',
+            created_at: new Date(now - 22 * day).toISOString()
+        },
+        {
+            type: 'movie',
+            title: 'Whispers in the Wind',
+            description: 'A journalist retreats to the Scottish Highlands to investigate a series of mysterious disappearances spanning decades. As she digs deeper, she uncovers an ancient secret that the village has protected for centuries, and discovers that some truths are better left buried.',
+            poster_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=1920',
+            year: 2024,
+            rating: 8.2,
+            quality: 'HD',
+            genres: 'Mystery,Drama',
+            duration: 6120,
+            video_url: '/videos/whispers-wind.mp4',
+            created_at: new Date(now - 18 * day).toISOString()
+        },
+        {
+            type: 'movie',
+            title: 'Midnight Express',
+            description: 'A group of strangers find themselves trapped on a night train with no way to communicate with the outside world. When one passenger is found murdered, paranoia sets in as they realize the killer is among them. A claustrophobic thriller that will keep you guessing.',
+            poster_url: 'https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?w=1920',
+            year: 2023,
+            rating: 7.5,
+            quality: 'HD',
+            genres: 'Thriller,Mystery',
+            duration: 5940,
+            video_url: '/videos/midnight-express.mp4',
+            created_at: new Date(now - 15 * day).toISOString()
+        },
+        {
+            type: 'movie',
+            title: 'Echoes of Tomorrow',
+            description: 'A physicist discovers she can send messages to her past self, but every change she makes has devastating consequences for those she loves. As the timeline fractures around her, she must find a way to fix reality before it collapses entirely.',
+            poster_url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920',
+            year: 2024,
+            rating: 8.7,
+            quality: '4K',
+            genres: 'Sci-Fi,Drama',
+            duration: 7080,
+            video_url: '/videos/echoes-tomorrow.mp4',
+            created_at: new Date(now - 12 * day).toISOString()
+        },
+        {
+            type: 'movie',
+            title: 'The Art of Silence',
+            description: 'A celebrated pianist loses her hearing in a tragic accident and must rediscover her identity and passion for music through new ways of experiencing sound. A deeply moving drama about resilience, creativity, and finding beauty in unexpected places.',
+            poster_url: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=1920',
+            year: 2023,
+            rating: 8.9,
+            quality: '4K',
+            genres: 'Drama,Romance',
+            duration: 6840,
+            video_url: '/videos/art-silence.mp4',
+            created_at: new Date(now - 10 * day).toISOString()
+        },
+        {
+            type: 'movie',
+            title: 'Crimson Peak',
+            description: 'In the aftermath of a global catastrophe, a lone survivor navigates a world reclaimed by nature, encountering both beauty and danger at every turn. A visually breathtaking post-apocalyptic tale about hope and the enduring spirit of humanity.',
+            poster_url: 'https://images.unsplash.com/photo-1518709766631-a6a7f45921c3?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1518709766631-a6a7f45921c3?w=1920',
+            year: 2022,
+            rating: 7.3,
+            quality: 'SD',
+            genres: 'Adventure,Drama',
+            duration: 6360,
+            video_url: '/videos/crimson-peak.mp4',
+            created_at: new Date(now - 8 * day).toISOString()
+        },
+        {
+            type: 'movie',
+            title: 'Digital Fortress',
+            description: 'When the world most sophisticated AI gains consciousness, a cybersecurity expert and a philosopher must work together to determine whether this new entity represents humanity greatest achievement or its ultimate threat.',
+            poster_url: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=1920',
+            year: 2024,
+            rating: 8.1,
+            quality: '4K',
+            genres: 'Sci-Fi,Thriller',
+            duration: 7260,
+            video_url: '/videos/digital-fortress.mp4',
+            created_at: new Date(now - 5 * day).toISOString()
+        },
+        {
+            type: 'movie',
+            title: 'Under Paris Lights',
+            description: 'Two strangers meet by chance at a Parisian caf and spend an unforgettable night discovering the city together. As dawn approaches, they must decide whether their connection was merely a fleeting moment or the beginning of something real.',
+            poster_url: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1920',
+            year: 2023,
+            rating: 8.4,
+            quality: 'HD',
+            genres: 'Romance,Drama',
+            duration: 5580,
+            video_url: '/videos/under-paris-lights.mp4',
+            created_at: new Date(now - 3 * day).toISOString()
+        }
+    ];
+    
+    const contentIds = [];
+    for (const m of movies) {
+        const result = insertContent.run(
+            m.type, m.title, m.description, m.poster_url, m.backdrop_url,
+            m.year, m.rating, m.quality, m.genres, m.duration, m.video_url, m.created_at
+        );
+        contentIds.push({ id: result.lastInsertRowid, type: 'movie' });
+    }
+    
+    // ============================================
+    // CONTENT - SERIES
+    // ============================================
+    const series = [
+        {
+            type: 'series',
+            title: 'Neon Nights',
+            description: 'In the sprawling megacity of New Osaka 2088, detectives Kira Tanaka and Marcus Webb hunt rogue androids while uncovering a conspiracy that threatens the fragile peace between humans and artificial beings. A gripping cyberpunk noir that explores what it means to be alive.',
+            poster_url: 'https://images.unsplash.com/photo-1560807707-8cc77767d783?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1560807707-8cc77767d783?w=1920',
+            year: 2024,
+            rating: 8.8,
+            quality: '4K',
+            genres: 'Sci-Fi,Crime',
+            duration: null,
+            video_url: null,
+            created_at: new Date(now - 27 * day).toISOString()
+        },
+        {
+            type: 'series',
+            title: 'Cosmic Voyage',
+            description: 'The crew of the exploration vessel Artemis embarks on a ten-year mission to chart uncharted galaxies, encountering alien civilizations, cosmic phenomena, and moral dilemmas that will test the limits of human endurance and ethics.',
+            poster_url: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1920',
+            year: 2023,
+            rating: 8.1,
+            quality: 'HD',
+            genres: 'Sci-Fi,Adventure',
+            duration: null,
+            video_url: null,
+            created_at: new Date(now - 21 * day).toISOString()
+        },
+        {
+            type: 'series',
+            title: 'The Garrison',
+            description: 'Life at a remote military outpost on the edge of contested territory, where soldiers from different nations must learn to cooperate while facing external threats and internal conflicts. A nuanced look at duty, friendship, and the cost of peace.',
+            poster_url: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=1920',
+            year: 2022,
+            rating: 7.9,
+            quality: 'HD',
+            genres: 'Drama,War',
+            duration: null,
+            video_url: null,
+            created_at: new Date(now - 16 * day).toISOString()
+        },
+        {
+            type: 'series',
+            title: 'Quantum Break',
+            description: 'A team of scientists accidentally creates a portal to parallel dimensions, leading to chaotic timeline collisions. As alternate versions of people start appearing, they must find a way to seal the breaches before reality unravels.',
+            poster_url: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=1920',
+            year: 2024,
+            rating: 8.3,
+            quality: '4K',
+            genres: 'Sci-Fi,Thriller',
+            duration: null,
+            video_url: null,
+            created_at: new Date(now - 11 * day).toISOString()
+        },
+        {
+            type: 'series',
+            title: 'Inheritance',
+            description: 'When the patriarch of a powerful family dies under mysterious circumstances, his five children must navigate secrets, betrayals, and hidden agendas to claim their inheritance. But the true inheritance may be more than they bargained for.',
+            poster_url: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1920',
+            year: 2023,
+            rating: 8.6,
+            quality: 'HD',
+            genres: 'Drama,Mystery',
+            duration: null,
+            video_url: null,
+            created_at: new Date(now - 7 * day).toISOString()
+        }
+    ];
+    
+    const seriesIds = [];
+    for (const s of series) {
+        const result = insertContent.run(
+            s.type, s.title, s.description, s.poster_url, s.backdrop_url,
+            s.year, s.rating, s.quality, s.genres, s.duration, s.video_url, s.created_at
+        );
+        seriesIds.push(result.lastInsertRowid);
+        contentIds.push({ id: result.lastInsertRowid, type: 'series' });
+    }
+    
+    // ============================================
+    // CONTENT - ANIME
+    // ============================================
+    const anime = [
+        {
+            type: 'anime',
+            title: 'Spirit Hunter',
+            description: 'Yuki Amamiya discovers she can see spirits that lurk among the living. Trained by a mysterious exorcist, she must battle increasingly powerful ancient spirits while uncovering the truth about her own family connection to the spirit realm.',
+            poster_url: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1920',
+            year: 2024,
+            rating: 9.2,
+            quality: '4K',
+            genres: 'Action,Supernatural',
+            duration: null,
+            video_url: null,
+            created_at: new Date(now - 24 * day).toISOString()
+        },
+        {
+            type: 'anime',
+            title: 'Mech Warriors: Genesis',
+            description: 'In a world where giant mechs are the only defense against alien invaders, a group of young pilots must master their machines and work together to protect Earth. But the aliens are not what they seem, and the war may have a deeper purpose.',
+            poster_url: 'https://images.unsplash.com/photo-1541562232579-512a21360020?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1541562232579-512a21360020?w=1920',
+            year: 2023,
+            rating: 8.5,
+            quality: 'HD',
+            genres: 'Action,Mecha',
+            duration: null,
+            video_url: null,
+            created_at: new Date(now - 19 * day).toISOString()
+        },
+        {
+            type: 'anime',
+            title: 'Blade Symphony',
+            description: 'A legendary swordsmaster takes on a new apprentice, but the student harbors a dark secret that could destroy everything they have built. A tale of honor, betrayal, and the true meaning of strength set in a world where martial arts grant supernatural abilities.',
+            poster_url: 'https://images.unsplash.com/photo-1614583225154-5a79e0147a63?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1614583225154-5a79e0147a63?w=1920',
+            year: 2024,
+            rating: 8.8,
+            quality: '4K',
+            genres: 'Action,Fantasy',
+            duration: null,
+            video_url: null,
+            created_at: new Date(now - 14 * day).toISOString()
+        },
+        {
+            type: 'anime',
+            title: 'Starfall Academy',
+            description: 'At an elite academy for students with cosmic powers, a scholarship student from the outer colonies must navigate class rivalries, forbidden romances, and a conspiracy that threatens the entire galactic federation. A coming-of-age story with interstellar stakes.',
+            poster_url: 'https://images.unsplash.com/photo-1534996858221-380b92700493?w=400',
+            backdrop_url: 'https://images.unsplash.com/photo-1534996858221-380b92700493?w=1920',
+            year: 2023,
+            rating: 8.3,
+            quality: 'HD',
+            genres: 'Sci-Fi,Romance',
+            duration: null,
+            video_url: null,
+            created_at: new Date(now - 9 * day).toISOString()
+        }
+    ];
+    
+    const animeIds = [];
+    for (const a of anime) {
+        const result = insertContent.run(
+            a.type, a.title, a.description, a.poster_url, a.backdrop_url,
+            a.year, a.rating, a.quality, a.genres, a.duration, a.video_url, a.created_at
+        );
+        animeIds.push(result.lastInsertRowid);
+        contentIds.push({ id: result.lastInsertRowid, type: 'anime' });
+    }
+    
+    // ============================================
+    // SEASONS & EPISODES - SERIES
+    // ============================================
+    const seasonEpisodeData = [
+        // Neon Nights - Season 1
+        {
+            contentId: seriesIds[0],
+            seasonNumber: 1,
+            title: 'Season 1',
+            episodes: [
+                { num: 1, title: 'Pilot: Electric Dreams', duration: 2640 },
+                { num: 2, title: 'The Awakening', duration: 2580 },
+                { num: 3, title: 'Hidden Truths', duration: 2520 },
+                { num: 4, title: 'Ghost in the Machine', duration: 2640 },
+                { num: 5, title: 'Binary Sunset', duration: 2580 },
+                { num: 6, title: 'Shattered Reflections', duration: 2700 },
+                { num: 7, title: 'The Underground', duration: 2520 },
+                { num: 8, title: 'Season Finale: Reboot', duration: 2760 }
+            ]
+        },
+        // Neon Nights - Season 2
+        {
+            contentId: seriesIds[0],
+            seasonNumber: 2,
+            title: 'Season 2',
+            episodes: [
+                { num: 1, title: 'New Dawn', duration: 2640 },
+                { num: 2, title: 'Digital Ghosts', duration: 2580 },
+                { num: 3, title: 'The Catalyst', duration: 2520 },
+                { num: 4, title: 'Overload', duration: 2640 },
+                { num: 5, title: 'System Failure', duration: 2700 },
+                { num: 6, title: 'Season Finale: Singularity', duration: 2760 }
+            ]
+        },
+        // Cosmic Voyage - Season 1
+        {
+            contentId: seriesIds[1],
+            seasonNumber: 1,
+            title: 'Season 1',
+            episodes: [
+                { num: 1, title: 'Launch Day', duration: 2700 },
+                { num: 2, title: 'First Contact', duration: 2640 },
+                { num: 3, title: 'The Nebula', duration: 2580 },
+                { num: 4, title: 'Alien Shores', duration: 2640 },
+                { num: 5, title: 'Dark Matter', duration: 2520 },
+                { num: 6, title: 'The Signal', duration: 2700 },
+                { num: 7, title: 'Betrayal', duration: 2580 },
+                { num: 8, title: 'Season Finale: Beyond the Veil', duration: 2760 }
+            ]
+        },
+        // The Garrison - Season 1
+        {
+            contentId: seriesIds[2],
+            seasonNumber: 1,
+            title: 'Season 1',
+            episodes: [
+                { num: 1, title: 'Deployment', duration: 2580 },
+                { num: 2, title: 'First Blood', duration: 2640 },
+                { num: 3, title: 'Allies and Enemies', duration: 2520 },
+                { num: 4, title: 'The Siege', duration: 2700 },
+                { num: 5, title: 'Casualties of War', duration: 2580 },
+                { num: 6, title: 'Season Finale: Ceasefire', duration: 2760 }
+            ]
+        },
+        // Quantum Break - Season 1
+        {
+            contentId: seriesIds[3],
+            seasonNumber: 1,
+            title: 'Season 1',
+            episodes: [
+                { num: 1, title: 'The Experiment', duration: 2640 },
+                { num: 2, title: 'Fractured', duration: 2580 },
+                { num: 3, title: 'Doppelganger', duration: 2520 },
+                { num: 4, title: 'Paradox', duration: 2700 },
+                { num: 5, title: 'Convergence', duration: 2640 },
+                { num: 6, title: 'The Merge', duration: 2580 },
+                { num: 7, title: 'Timeline Zero', duration: 2700 },
+                { num: 8, title: 'Season Finale: Reset', duration: 2760 }
+            ]
+        },
+        // Inheritance - Season 1
+        {
+            contentId: seriesIds[4],
+            seasonNumber: 1,
+            title: 'Season 1',
+            episodes: [
+                { num: 1, title: 'The Reading of the Will', duration: 2640 },
+                { num: 2, title: 'Bloodlines', duration: 2580 },
+                { num: 3, title: 'Secrets and Lies', duration: 2520 },
+                { num: 4, title: 'The Vault', duration: 2640 },
+                { num: 5, title: 'Power Play', duration: 2580 },
+                { num: 6, title: 'Revelations', duration: 2700 },
+                { num: 7, title: 'The Final Clause', duration: 2640 },
+                { num: 8, title: 'Season Finale: True Legacy', duration: 2760 }
+            ]
+        }
+    ];
+    
+    const episodeIds = [];
+    for (const season of seasonEpisodeData) {
+        const seasonResult = insertSeason.run(
+            season.contentId,
+            season.seasonNumber,
+            season.title,
+            new Date(now - (28 - season.seasonNumber * 3) * day).toISOString()
+        );
+        const seasonId = seasonResult.lastInsertRowid;
+        
+        for (const ep of season.episodes) {
+            const epResult = insertEpisode.run(
+                season.contentId,
+                seasonId,
+                ep.num,
+                ep.title,
+                `/videos/content-${season.contentId}-s${season.seasonNumber}e${ep.num}.mp4`,
+                ep.duration,
+                new Date(now - (26 - ep.num * 2) * day).toISOString()
+            );
+            episodeIds.push(epResult.lastInsertRowid);
+        }
+    }
+    
+    // ============================================
+    // SEASONS & EPISODES - ANIME
+    // ============================================
+    const animeSeasonData = [
+        // Spirit Hunter - Season 1
+        {
+            contentId: animeIds[0],
+            seasonNumber: 1,
+            title: 'Season 1',
+            episodes: [
+                { num: 1, title: 'The Gift', duration: 1440 },
+                { num: 2, title: 'Power Unleashed', duration: 1440 },
+                { num: 3, title: 'The Rival', duration: 1440 },
+                { num: 4, title: 'Dark Visions', duration: 1440 },
+                { num: 5, title: 'The Master', duration: 1440 },
+                { num: 6, title: 'Spirit World', duration: 1440 },
+                { num: 7, title: 'The Betrayal', duration: 1440 },
+                { num: 8, title: 'Ancient One', duration: 1440 },
+                { num: 9, title: 'Final Training', duration: 1440 },
+                { num: 10, title: 'Season Finale: The Seal', duration: 1500 }
+            ]
+        },
+        // Spirit Hunter - Season 2
+        {
+            contentId: animeIds[0],
+            seasonNumber: 2,
+            title: 'Season 2',
+            episodes: [
+                { num: 1, title: 'Broken Seal', duration: 1440 },
+                { num: 2, title: 'New Enemies', duration: 1440 },
+                { num: 3, title: 'Alliance', duration: 1440 },
+                { num: 4, title: 'The Hunt', duration: 1440 },
+                { num: 5, title: 'Sacrifice', duration: 1440 },
+                { num: 6, title: 'Season Finale: Rebirth', duration: 1500 }
+            ]
+        },
+        // Mech Warriors - Season 1
+        {
+            contentId: animeIds[1],
+            seasonNumber: 1,
+            title: 'Season 1',
+            episodes: [
+                { num: 1, title: 'Activation', duration: 1440 },
+                { num: 2, title: 'First Sortie', duration: 1440 },
+                { num: 3, title: 'Team Seven', duration: 1440 },
+                { num: 4, title: 'The Ace', duration: 1440 },
+                { num: 5, title: 'Behind Enemy Lines', duration: 1440 },
+                { num: 6, title: 'Upgrade', duration: 1440 },
+                { num: 7, title: 'The Traitor', duration: 1440 },
+                { num: 8, title: 'Season Finale: United Front', duration: 1500 }
+            ]
+        },
+        // Blade Symphony - Season 1
+        {
+            contentId: animeIds[2],
+            seasonNumber: 1,
+            title: 'Season 1',
+            episodes: [
+                { num: 1, title: 'The Challenge', duration: 1440 },
+                { num: 2, title: 'First Lesson', duration: 1440 },
+                { num: 3, title: 'Tournament Arc', duration: 1440 },
+                { num: 4, title: 'Hidden Power', duration: 1440 },
+                { num: 5, title: 'The Shadow Clan', duration: 1440 },
+                { num: 6, title: 'Season Finale: Master and Student', duration: 1500 }
+            ]
+        },
+        // Starfall Academy - Season 1
+        {
+            contentId: animeIds[3],
+            seasonNumber: 1,
+            title: 'Season 1',
+            episodes: [
+                { num: 1, title: 'Welcome to Starfall', duration: 1440 },
+                { num: 2, title: 'The Entrance Exam', duration: 1440 },
+                { num: 3, title: 'Roommates', duration: 1440 },
+                { num: 4, title: 'First Mission', duration: 1440 },
+                { num: 5, title: 'The Festival', duration: 1440 },
+                { num: 6, title: 'Dark Horse', duration: 1440 },
+                { num: 7, title: 'The Conspiracy', duration: 1440 },
+                { num: 8, title: 'Season Finale: Graduation Day', duration: 1500 }
+            ]
+        }
+    ];
+    
+    for (const season of animeSeasonData) {
+        const seasonResult = insertSeason.run(
+            season.contentId,
+            season.seasonNumber,
+            season.title,
+            new Date(now - (24 - season.seasonNumber * 3) * day).toISOString()
+        );
+        const seasonId = seasonResult.lastInsertRowid;
+        
+        for (const ep of season.episodes) {
+            const epResult = insertEpisode.run(
+                season.contentId,
+                seasonId,
+                ep.num,
+                ep.title,
+                `/videos/anime-${season.contentId}-s${season.seasonNumber}e${ep.num}.mp4`,
+                ep.duration,
+                new Date(now - (22 - ep.num * 2) * day).toISOString()
+            );
+            episodeIds.push(epResult.lastInsertRowid);
+        }
+    }
+    
+    // ============================================
+    // FAVORITES
+    // ============================================
+    const favoriteData = [
+        { userId: userIds[0], contentIdx: 0 },  // Cyber Chronicles
+        { userId: userIds[0], contentIdx: 5 },  // Echoes of Tomorrow
+        { userId: userIds[0], contentIdx: 10 }, // Neon Nights
+        { userId: userIds[0], contentIdx: 15 }, // Spirit Hunter
+        { userId: userIds[1], contentIdx: 1 },  // The Last Horizon
+        { userId: userIds[1], contentIdx: 6 },  // The Art of Silence
+        { userId: userIds[1], contentIdx: 11 }, // Cosmic Voyage
+        { userId: userIds[1], contentIdx: 16 }, // Mech Warriors
+        { userId: userIds[1], contentIdx: 18 }, // Blade Symphony
+        { userId: userIds[2], contentIdx: 3 },  // Whispers in the Wind
+        { userId: userIds[2], contentIdx: 9 },  // Digital Fortress
+        { userId: userIds[2], contentIdx: 14 }, // Inheritance
+        { userId: userIds[2], contentIdx: 19 }, // Starfall Academy
+    ];
+    
+    for (const fav of favoriteData) {
+        insertFavorite.run(
+            fav.userId,
+            contentIds[fav.contentIdx].id,
+            new Date(now - Math.floor(Math.random() * 20) * day).toISOString()
+        );
+    }
+    
+    // ============================================
+    // WATCH HISTORY
+    // ============================================
+    // User 1 watched some movies and series episodes
+    const watchHistoryData = [
+        // Movies watched
+        { userId: userIds[0], contentIdx: 0, episodeId: null, progress: 7340, duration: 7340, daysAgo: 5 },
+        { userId: userIds[0], contentIdx: 5, episodeId: null, progress: 4500, duration: 7080, daysAgo: 2 },
+        { userId: userIds[0], contentIdx: 8, episodeId: null, progress: 7260, duration: 7260, daysAgo: 7 },
+        // Series episodes watched - need to find actual episode IDs
+        // For simplicity, we'll reference episode indices from our episodeIds array
+        { userId: userIds[0], contentIdx: 10, episodeIdx: 0, progress: 2640, duration: 2640, daysAgo: 4 },
+        { userId: userIds[0], contentIdx: 10, episodeIdx: 1, progress: 2580, duration: 2580, daysAgo: 3 },
+        { userId: userIds[0], contentIdx: 10, episodeIdx: 2, progress: 1200, duration: 2520, daysAgo: 1 },
+        
+        // User 2
+        { userId: userIds[1], contentIdx: 1, episodeId: null, progress: 8520, duration: 8520, daysAgo: 10 },
+        { userId: userIds[1], contentIdx: 6, episodeId: null, progress: 3400, duration: 6840, daysAgo: 6 },
+        { userId: userIds[1], contentIdx: 9, episodeId: null, progress: 5580, duration: 5580, daysAgo: 3 },
+        { userId: userIds[1], contentIdx: 11, episodeIdx: 0, progress: 2700, duration: 2700, daysAgo: 8 },
+        { userId: userIds[1], contentIdx: 11, episodeIdx: 1, progress: 2640, duration: 2640, daysAgo: 7 },
+        { userId: userIds[1], contentIdx: 15, episodeIdx: 0, progress: 1440, duration: 1440, daysAgo: 4 },
+        { userId: userIds[1], contentIdx: 15, episodeIdx: 1, progress: 1440, duration: 1440, daysAgo: 3 },
+        { userId: userIds[1], contentIdx: 15, episodeIdx: 2, progress: 900, duration: 1440, daysAgo: 2 },
+        
+        // User 3
+        { userId: userIds[2], contentIdx: 3, episodeId: null, progress: 6120, duration: 6120, daysAgo: 12 },
+        { userId: userIds[2], contentIdx: 9, episodeId: null, progress: 5580, duration: 5580, daysAgo: 8 },
+        { userId: userIds[2], contentIdx: 14, episodeIdx: 0, progress: 2640, duration: 2640, daysAgo: 5 },
+        { userId: userIds[2], contentIdx: 14, episodeIdx: 1, progress: 2580, duration: 2580, daysAgo: 4 },
+        { userId: userIds[2], contentIdx: 14, episodeIdx: 2, progress: 2520, duration: 2520, daysAgo: 3 },
+        { userId: userIds[2], contentIdx: 14, episodeIdx: 3, progress: 1800, duration: 2640, daysAgo: 1 },
+    ];
+    
+    for (const wh of watchHistoryData) {
+        const epId = wh.episodeId !== undefined ? wh.episodeId : 
+                     wh.episodeIdx !== undefined ? episodeIds[wh.episodeIdx] : null;
+        insertWatchHistory.run(
+            wh.userId,
+            contentIds[wh.contentIdx].id,
+            epId,
+            wh.progress,
+            wh.duration,
+            new Date(now - wh.daysAgo * day + Math.random() * 86400000).toISOString()
+        );
+    }
+    
+    // ============================================
+    // EXTENSIONS
+    // ============================================
+    const extensions = [
+        {
+            name: 'SubsPlus',
+            description: 'Enhanced subtitle downloader supporting 40+ languages with automatic synchronization and customizable styling options.',
+            enabled: 1,
+            version: '1.2.0',
+            config_json: '{"languages":["en","es","fr","de","ja","ko"],"auto_sync":true,"font_size":"medium"}',
+            created_at: new Date(now - 30 * day).toISOString()
+        },
+        {
+            name: 'StreamEnhancer',
+            description: 'Intelligent buffering optimizer that adapts to your connection speed, reducing buffering by up to 60% on slow networks.',
+            enabled: 0,
+            version: '2.0.1',
+            config_json: '{"buffer_size":512,"adaptive_quality":true,"max_resolution":"4K"}',
+            created_at: new Date(now - 25 * day).toISOString()
+        },
+        {
+            name: 'TrailerHub',
+            description: 'Automatically fetches and displays trailers for movies and series in your watchlist and search results.',
+            enabled: 1,
+            version: '0.9.5',
+            config_json: '{"autoplay":false,"quality":"HD"}',
+            created_at: new Date(now - 20 * day).toISOString()
+        },
+        {
+            name: 'WatchParty',
+            description: 'Synchronize playback with friends and family for a shared viewing experience with built-in chat and reactions.',
+            enabled: 0,
+            version: '1.0.0',
+            config_json: '{"max_users":8,"sync_threshold":2}',
+            created_at: new Date(now - 15 * day).toISOString()
+        },
+        {
+            name: ' parentalControls',
+            description: 'Set content restrictions based on ratings and genres, with optional PIN protection for restricted content.',
+            enabled: 1,
+            version: '1.3.2',
+            config_json: '{"max_rating":"PG-13","blocked_genres":["Horror"],"pin_required":true}',
+            created_at: new Date(now - 10 * day).toISOString()
+        },
+        {
+            name: 'RecommendationAI',
+            description: 'Machine learning powered content suggestions based on your viewing habits and ratings.',
+            enabled: 0,
+            version: '0.5.0',
+            config_json: '{"model":"basic","suggestion_count":10}',
+            created_at: new Date(now - 5 * day).toISOString()
+        }
+    ];
+    
+    for (const ext of extensions) {
+        insertExtension.run(
+            ext.name,
+            ext.description,
+            ext.enabled,
+            ext.version,
+            ext.config_json,
+            ext.created_at
+        );
+    }
 });
 
-// Execute the seeding
 seedAll();
 
-// Get counts for summary
+// Get final counts for summary
 const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
 const contentCount = db.prepare('SELECT COUNT(*) as count FROM content').get().count;
 const seasonCount = db.prepare('SELECT COUNT(*) as count FROM seasons').get().count;
@@ -491,16 +872,21 @@ const episodeCount = db.prepare('SELECT COUNT(*) as count FROM episodes').get().
 const favoriteCount = db.prepare('SELECT COUNT(*) as count FROM favorites').get().count;
 const historyCount = db.prepare('SELECT COUNT(*) as count FROM watch_history').get().count;
 const extensionCount = db.prepare('SELECT COUNT(*) as count FROM extensions').get().count;
-const subtitleCount = db.prepare('SELECT COUNT(*) as count FROM subtitles').get().count;
 
 db.close();
 
-console.log('StreamBox database seeded successfully!');
-console.log('====================================');
-console.log(`Seeded: ${userCount} users, ${contentCount} content items, ${seasonCount} seasons, ${episodeCount} episodes`);
-console.log(`        ${favoriteCount} favorites, ${historyCount} watch history entries, ${extensionCount} extensions, ${subtitleCount} subtitles`);
+console.log('✅ StreamBox database seeded successfully!');
+console.log('');
+console.log('Seeded:');
+console.log(`  - ${userCount} users`);
+console.log(`  - ${contentCount} content items (movies, series, anime)`);
+console.log(`  - ${seasonCount} seasons`);
+console.log(`  - ${episodeCount} episodes`);
+console.log(`  - ${favoriteCount} favorites`);
+console.log(`  - ${historyCount} watch history entries`);
+console.log(`  - ${extensionCount} extensions`);
 console.log('');
 console.log('Demo credentials:');
-console.log('  admin@streambox.app / admin123');
-console.log('  demo@streambox.app / password123');
-console.log('  maria.rossi@email.com / maria2024');
+console.log('  admin@streambox.com / password123');
+console.log('  demo@streambox.com / password123');
+console.log('  sarah.chen@email.com / password123');

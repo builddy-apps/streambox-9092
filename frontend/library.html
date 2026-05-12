@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamBox - Library</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd',
+                            400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8',
+                            800: '#1e40af', 900: '#1e3a8a', 950: '#172554'
+                        },
+                        accent: {
+                            50: '#fef2f2', 100: '#fee2e2', 200: '#fecaca', 300: '#fca5a5',
+                            400: '#f87171', 500: '#ef4444', 600: '#dc2626', 700: '#b91c1c',
+                            800: '#991b1b', 900: '#7f1d1d', 950: '#450a0a'
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        @keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes slide-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .animate-fade-in { animation: fade-in 0.4s ease-out forwards; }
+        .animate-scale-in { animation: scale-in 0.2s ease-out forwards; }
+        .animate-slide-up { animation: slide-up 0.3s ease-out forwards; }
+        
+        [data-focusable] {
+            outline: none;
+            transition: all 0.2s ease-out;
+        }
+        .dpad-focused {
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3);
+            transform: scale(1.05);
+            z-index: 10;
+        }
+        .dark .dpad-focused {
+            box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.5), 0 0 20px rgba(96, 165, 250, 0.3);
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            border: 4px solid rgba(59, 130, 246, 0.2);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        .dark .spinner {
+            border-color: rgba(96, 165, 250, 0.2);
+            border-top-color: #60a5fa;
+        }
+        
+        body { transition: background-color 0.3s ease, color 0.3s ease; }
+        
+        /* Toggle Switch */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #3b82f6;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-50 dark:bg-black text-slate-900 dark:text-white transition-colors duration-300">
+    <!-- Header -->
+    <header class="sticky top-0 z-50 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-black/95 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16 sm:h-20">
+                <!-- Logo -->
+                <div class="flex items-center gap-3">
+                    <button onclick="window.location.href='/home.html'" class="flex items-center gap-2 group" data-focusable>
+                        <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-lg group-hover:shadow-primary-500/30 transition-shadow">
+                            <svg class="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                        <span class="text-xl sm:text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-primary-400 dark:to-primary-600 bg-clip-text text-transparent">StreamBox</span>
+                    </button>
+                </div>
+
+                <!-- Navigation -->
+                <nav class="flex items-center gap-1 sm:gap-2" id="main-nav">
+                    <a href="/home.html" class="nav-item px-4 py-2 sm:px-5 sm:py-2.5 text-base sm:text-lg font-medium rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-primary-600 dark:hover:text-primary-400 transition-all focus:outline-none focus:ring-2 focus:ring-primary-500" data-focusable>
+                        Home
+                    </a>
+                    <a href="/search.html" class="nav-item px-4 py-2 sm:px-5 sm:py-2.5 text-base sm:text-lg font-medium rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-primary-600 dark:hover:text-primary-400 transition-all focus:outline-none focus:ring-2 focus:ring-primary-500" data-focusable>
+                        Search
+                    </a>
+                    <a href="/library.html" class="nav-item px-4 py-2 sm:px-5 sm:py-2.5 text-base sm:text-lg font-medium rounded-lg bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 transition-all" data-focusable>
+                        Library
+                    </a>
+                </nav>
+
+                <!-- Right side actions -->
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <button onclick="window.StreamBox.DarkMode.toggle()" class="p-2.5 sm:p-3 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-primary-500" data-focusable aria-label="Toggle dark mode">
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                        </svg>
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6 dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                        </svg>
+                    </button>
+                    <button onclick="handleAuthClick()" class="px-4 py-2 sm:px-5 sm:py-2.5 text-base sm:text-lg font-medium rounded-lg bg-primary-600 hover:bg-primary-700 text-white shadow-lg hover:shadow-primary-600/30 transition-all focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-black" data-focusable id="auth-btn">
+                        Sign In
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <h1 class="text-3xl sm:text-4xl font-bold mb-6 animate-fade-in">My Library</h1>
+
+        <!-- Tabs -->
+        <div class="flex gap-2 mb-8 border-b border-slate-200 dark:border-slate-800 animate-slide-up" style="animation-delay: 0.1s;">
+            <button onclick="switchTab('favorites')" id="tab-btn-favorites" class="tab-btn px-6 py-3 text-lg font-medium rounded-t-lg border-b-2 border-primary-500 text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 transition-all" data-focusable>
+                Favorites
+            </button>
+            <button onclick="switchTab('history')" id="tab-btn-history" class="tab-btn px-6 py-3 text-lg font-medium rounded-t-lg border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900 transition-all" data-focusable>
+                Watch History
+            </button>
+            <button onclick="switchTab('extensions')" id="tab-btn-extensions" class="tab-btn px-6 py-3 text-lg font-medium rounded-t-lg border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-900 transition-all" data-focusable>
+                Extensions
+            </button>
+        </div>
+
+        <!-- Tab Content -->
+        <div id="content-area" class="min-h-[400px]">
+            <!-- Content loaded via JS -->
+        </div>
+    </main>
+
+    <script src="/app.js"></script>
+    <script src="/auth-client.js"></script>
+    <script>
+        let currentTab = 'favorites';
+
+        function handleAuthClick() {
+            if (window.StreamBox.Auth.isAuthenticated()) {
+                window.StreamBox.Auth.logout();
+            } else {
+                window.StreamBox.PageTransition.navigate('/login.html');
+            }
+        }
+
+        function updateAuthButton() {
+            const authBtn = document.getElementById('auth-btn');
+            const isAuthenticated = window.StreamBox.Auth.isAuthenticated();
+            authBtn.textContent = isAuthenticated ? 'Sign Out' : 'Sign In';
+        }
+
+        async function switchTab(tab) {
+            currentTab = tab;
+            
+            // Update tab buttons styling
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('border-primary-500', 'text-primary-600', 'dark:text-primary-400', 'bg-primary-50', 'dark:bg-primary-900/20');
+                btn.classList.add('border-transparent', 'text-slate-500', 'dark:text-slate-400');
+            });
+            
+            const activeBtn = document.getElementById(`tab-btn-${tab}`);
+            activeBtn.classList.remove('border-transparent', 'text-slate-500', 'dark:text-slate-400');
+            activeBtn.classList.add('border-primary-500', 'text-primary-600', 'dark:text-primary-400', 'bg-primary-50', 'dark:bg-primary-900/20');
+
+            // Load content
+            const contentArea = document.getElementById('content-area');
+            contentArea.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-20">
+                    <div class="spinner w-12 h-12"></div>
+                    <p class="mt-4 text-slate-500 dark:text-slate-400">Loading...</p>
+                </div>
+            `;
+
+            try {
+                if (tab === 'favorites') {
+                    await loadFavorites();
+                } else if (tab === 'history') {
+                    await loadHistory();
+                } else if (tab === 'extensions') {
+                    await loadExtensions();
+                }
+            } catch (err) {
+                console.error(err);
+                contentArea.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-20">
+                        <svg class="w-16 h-16 text-slate-300 dark:text-slate-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        <p class="text-slate-500 dark:text-slate-400 text-lg">Failed to load content</p>
+                        <button onclick="switchTab('${tab}')" class="mt-4 px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg" data-focusable>Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        async function loadFavorites() {
+            const res = await window.StreamBox.API.get('/api/user/favorites');
+            const contentArea = document.getElementById('content-area');
+            
+            if (!res.success || res.data.length === 0) {
+                contentArea.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-20 animate-fade-in">
+                        <svg class="w-24 h-24 text-slate-300 dark:text-slate-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                        </svg>
+                        <h3 class="text-xl font-medium text-slate-700 dark:text-slate-300 mb-2">No favorites yet</h3>
+                        <p class="text-slate-500 dark:text-slate-400 mb-6">Start adding content to your favorites</p>
+                        <a href="/home.html" class="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors" data-focusable>Browse Content</a>
+                    </div>
+                `;
+                return;
+            }
+
+            const grid = document.createElement('div');
+            grid.className = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6 animate-fade-in';
+            
+            res.data.forEach((item, index) => {
+                const card = document.createElement('div');
+                card.className = 'group relative bg-white dark:bg-slate-900 rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300';
+                card.style.animationDelay = `${index * 50}ms`;
+                card.innerHTML = `
+                    <div class="relative aspect-[2/3] overflow-hidden cursor-pointer" onclick="window.location.href='/detail.html?id=${item.content_id}'" data-focusable>
+                        <img src="${item.poster_url || '/placeholder-poster.jpg'}" alt="${item.title}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105">
+                        <button onclick="removeFavorite(${item.content_id}, event)" class="absolute top-2 right-2 p-2 bg-black/70 hover:bg-red-600 rounded-full text-white transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100" data-focusable aria-label="Remove from favorites">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div class="absolute bottom-3 left-3 right-3">
+                                <p class="text-white font-medium text-sm line-clamp-2">${item.title}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+            
+            contentArea.innerHTML = '';
+            contentArea.appendChild(grid);
+            window.StreamBox.DPadNav.init(contentArea, '[data-focusable]');
+        }
+
+        async function removeFavorite(contentId, event) {
+            event.stopPropagation();
+            if (!confirm('Remove from favorites?')) return;
+            
+            try {
+                await window.StreamBox.API.delete(`/api/user/favorites/${contentId}`);
+                window.StreamBox.Toast.show('Removed from favorites', 'success');
+                await loadFavorites();
+            } catch (err) {
+                window.StreamBox.Toast.show('Failed to remove favorite', 'error');
+            }
+        }
+
+        async function loadHistory() {
+            const res = await window.StreamBox.API.get('/api/user/history');
+            const contentArea = document.getElementById('content-area');
+            
+            if (!res.success || res.data.length === 0) {
+                contentArea.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-20 animate-fade-in">
+                        <svg class="w-24 h-24 text-slate-300 dark:text-slate-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <h3 class="text-xl font-medium text-slate-700 dark:text-slate-300 mb-2">No watch history</h3>
+                        <p class="text-slate-500 dark:text-slate-400 mb-6">Start watching to build your history</p>
+                        <a href="/home.html" class="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors" data-focusable>Start Watching</a>
+                    </div>
+                `;
+                return;
+            }
+
+            const list = document.createElement('div');
+            list.className = 'space-y-4 animate-fade-in';
+            
+            res.data.forEach((item, index) => {
+                const progress = item.duration_seconds ? Math.round((item.progress_seconds / item.duration_seconds) * 100) : 0;
+                const row = document.createElement('div');
+                row.className = 'flex items-center gap-4 bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm hover:shadow-md transition-all';
+                row.style.animationDelay = `${index * 50}ms`;
+                row.innerHTML = `
+                    <div class="w-20 h-28 flex-shrink-0 rounded-lg overflow-hidden bg-slate-200 dark:bg-slate-800">
+                        <img src="${item.poster_url || '/placeholder-poster.jpg'}" alt="${item.title}" class="w-full h-full object-cover">
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-lg font-semibold text-slate-900 dark:text-white truncate">${item.title}</h3>
+                        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            ${item.episode_title ? `S${item.season_number}:E${item.episode_number} - ${item.episode_title}` : 'Movie'}
+                        </p>
+                        <div class="mt-3">
+                            <div class="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+                                <span>${Math.floor(item.progress_seconds / 60)}m watched</span>
+                                <span>${progress}%</span>
+                            </div>
+                            <div class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                <div class="h-full bg-primary-500 rounded-full transition-all duration-300" style="width: ${progress}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="resumeWatch(${item.content_id}, ${item.episode_id || 'null'})" class="flex-shrink-0 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2" data-focusable>
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z"/>
+                        </svg>
+                        Resume
+                    </button>
+                `;
+                list.appendChild(row);
+            });
+            
+            contentArea.innerHTML = '';
+            contentArea.appendChild(list);
+            window.StreamBox.DPadNav.init(contentArea, '[data-focusable]');
+        }
+
+        function resumeWatch(contentId, episodeId) {
+            if (episodeId) {
+                window.StreamBox.PageTransition.navigate(`/player.html?contentId=${contentId}&episodeId=${episodeId}`);
+            } else {
+                window.StreamBox.PageTransition.navigate(`/player.html?contentId=${contentId}`);
+            }
+        }
+
+        async function loadExtensions() {
+            const res = await window.StreamBox.API.get('/api/user/extensions');
+            const contentArea = document.getElementById('content-area');
+            
+            if (!res.success || res.data.length === 0) {
+                contentArea.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-20 animate-fade-in">
+                        <svg class="w-24 h-24 text-slate-300 dark:text-slate-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/>
+                        </svg>
+                        <h3 class="text-xl font-medium text-slate-700 dark:text-slate-300 mb-2">No extensions available</h3>
+                        <p class="text-slate-500 dark:text-slate-400">Check back later for new plugins</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const list = document.createElement('div');
+            list.className = 'grid gap-4 sm:grid-cols-2 lg:grid-cols-3 animate-fade-in';
+            
+            res.data.forEach((ext, index) => {
+                const card = document.createElement('div');
+                card.className = 'bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm hover:shadow-md transition-all border border-slate-200 dark:border-slate-800';
+                card.style.animationDelay = `${index * 50}ms`;
+                card.innerHTML = `
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
+                                ${ext.name.charAt(0)}
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-slate-900 dark:text-white">${ext.name}</h3>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">v${ext.version}</p>
+                            </div>
+                        </div>
+                        <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+                            <input type="checkbox" name="toggle" id="ext-toggle-${ext.id}" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer border-slate-300 dark:border-slate-600 transition-all duration-300" ${ext.enabled ? 'checked' : ''} onchange="toggleExtension(${ext.id}, this.checked)">
+                            <label for="ext-toggle-${ext.id}" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-300 dark:bg-slate-700 cursor-pointer transition-colors duration-300"></label>
+                        </div>
+                    </div>
+                    <p class="mt-4 text-sm text-slate-600 dark:text-slate-400">${ext.description}</p>
+                `;
+                list.appendChild(card);
+            });
+            
+            contentArea.innerHTML = '';
+            contentArea.appendChild(list);
+            window.StreamBox.DPadNav.init(contentArea, '[data-focusable]');
+        }
+
+        async function toggleExtension(extId, enabled) {
+            try {
+                await window.StreamBox.API.put(`/api/user/extensions/${extId}`, { enabled });
+                window.StreamBox.Toast.show(`Extension ${enabled ? 'enabled' : 'disabled'}`, 'success');
+            } catch (err) {
+                window.StreamBox.Toast.show('Failed to update extension', 'error');
+                // Revert toggle
+                const checkbox = document.getElementById(`ext-toggle-${extId}`);
+                if (checkbox) checkbox.checked = !enabled;
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            updateAuthButton();
+            
+            if (!window.StreamBox.Auth.isAuthenticated()) {
+                window.StreamBox.PageTransition.navigate('/login.html');
+                return;
+            }
+
+            await switchTab('favorites');
+        });
+    </script>
+</body>
+</html>
