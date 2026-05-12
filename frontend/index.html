@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamBox - Premium Streaming</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#fef2f2',
+                            100: '#fee2e2',
+                            200: '#fecaca',
+                            300: '#fca5a5',
+                            400: '#f87171',
+                            500: '#ef4444',
+                            600: '#dc2626',
+                            700: '#b91c1c',
+                            800: '#991b1b',
+                            900: '#7f1d1d',
+                            950: '#450a0a',
+                        },
+                        accent: {
+                            400: '#2dd4bf',
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                        }
+                    },
+                    fontSize: {
+                        'tv-sm': '1rem',
+                        'tv-base': '1.125rem',
+                        'tv-lg': '1.5rem',
+                        'tv-xl': '2rem',
+                        'tv-2xl': '2.5rem',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes slide-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slide-in-right { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes slide-in-left { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        .animate-fade-in { animation: fade-in 0.4s ease-out forwards; }
+        .animate-scale-in { animation: scale-in 0.2s ease-out forwards; }
+        .animate-slide-up { animation: slide-up 0.3s ease-out forwards; }
+        .animate-slide-in-right { animation: slide-in-right 0.3s ease-out forwards; }
+        .animate-slide-in-left { animation: slide-in-left 0.3s ease-out forwards; }
+        .stagger-1 { animation-delay: 0.05s; opacity: 0; }
+        .stagger-2 { animation-delay: 0.1s; opacity: 0; }
+        .stagger-3 { animation-delay: 0.15s; opacity: 0; }
+        .stagger-4 { animation-delay: 0.2s; opacity: 0; }
+        .stagger-5 { animation-delay: 0.25s; opacity: 0; }
+        
+        :focus-visible { outline: 2px solid #ef4444; outline-offset: 2px; }
+        
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #000; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        
+        .nav-active { color: white; background: rgba(51, 65, 85, 0.5); }
+    </style>
+</head>
+<body class="min-h-screen bg-black text-white antialiased">
+    <header class="sticky top-0 z-40 border-b border-slate-800 bg-black/95 backdrop-blur-md">
+        <div class="mx-auto max-w-7xl flex items-center justify-between px-4 h-16 lg:h-20">
+            <div class="flex items-center gap-4 lg:gap-8">
+                <a href="#home" class="flex items-center gap-2 group focus:outline-none rounded-lg" data-nav="home">
+                    <div class="w-10 h-10 lg:w-12 lg:h-12 bg-gradient-to-br from-primary-500 to-accent-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+                        <svg class="w-6 h-6 lg:w-7 lg:h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z"/>
+                        </svg>
+                    </div>
+                    <span class="text-xl lg:text-2xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">StreamBox</span>
+                </a>
+                <nav class="hidden md:flex items-center gap-1">
+                    <a href="#home" class="nav-link nav-active px-4 py-2 text-base font-medium text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 transition-all focus:outline-none" data-nav="home">Home</a>
+                    <a href="#search" class="nav-link px-4 py-2 text-base font-medium text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 transition-all focus:outline-none" data-nav="search">Search</a>
+                    <a href="#library" class="nav-link px-4 py-2 text-base font-medium text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 transition-all focus:outline-none" data-nav="library">Library</a>
+                    <a href="#extensions" class="nav-link px-4 py-2 text-base font-medium text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 transition-all focus:outline-none" data-nav="extensions">Extensions</a>
+                </nav>
+            </div>
+            <div class="flex items-center gap-2 lg:gap-4">
+                <button onclick="toggleDark()" class="p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all focus:outline-none" aria-label="Toggle dark mode">
+                    <svg class="w-5 h-5 lg:w-6 lg:h-6 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                    <svg class="w-5 h-5 lg:w-6 lg:h-6 dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                </button>
+                <div class="flex items-center gap-2">
+                    <a href="login.html" id="login-btn" class="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg shadow-lg transition-all active:scale-95 focus:outline-none">Sign In</a>
+                    <button id="user-avatar" onclick="handleUserMenu()" class="hidden w-10 h-10 lg:w-12 lg:h-12 rounded-full bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center text-white font-bold text-lg focus:outline-none hover:scale-105 transition-transform">
+                        <span id="avatar-initial">U</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-slate-800 bg-black/95 backdrop-blur-md">
+        <div class="flex items-center justify-around py-2">
+            <a href="#home" class="mobile-nav-link flex flex-col items-center gap-1 px-4 py-2 text-slate-400 hover:text-white focus:outline-none rounded-lg" data-nav="home">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                <span class="text-xs">Home</span>
+            </a>
+            <a href="#search" class="mobile-nav-link flex flex-col items-center gap-1 px-4 py-2 text-slate-400 hover:text-white focus:outline-none rounded-lg" data-nav="search">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                <span class="text-xs">Search</span>
+            </a>
+            <a href="#library" class="mobile-nav-link flex flex-col items-center gap-1 px-4 py-2 text-slate-400 hover:text-white focus:outline-none rounded-lg" data-nav="library">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+                <span class="text-xs">Library</span>
+            </a>
+            <a href="#extensions" class="mobile-nav-link flex flex-col items-center gap-1 px-4 py-2 text-slate-400 hover:text-white focus:outline-none rounded-lg" data-nav="extensions">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/></svg>
+                <span class="text-xs">Extensions</span>
+            </a>
+        </div>
+    </nav>
+
+    <main id="page-content" class="mx-auto max-w-7xl px-4 py-6 pb-24 md:pb-8 min-h-[calc(100vh-8rem)]">
+        <div id="loading-skeleton" class="space-y-6">
+            <div class="h-64 bg-slate-900 rounded-xl animate-pulse"></div>
+            <div class="h-8 bg-slate-900 rounded w-1/4 animate-pulse"></div>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <div class="aspect-[2/3] bg-slate-900 rounded-lg animate-pulse"></div>
+                <div class="aspect-[2/3] bg-slate-900 rounded-lg animate-pulse"></div>
+                <div class="aspect-[2/3] bg-slate-900 rounded-lg animate-pulse"></div>
+                <div class="aspect-[2/3] bg-slate-900 rounded-lg animate-pulse"></div>
+            </div>
+        </div>
+    </main>
+
+    <div id="toast" class="fixed bottom-24 md:bottom-4 right-4 z-50 hidden">
+        <div class="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white shadow-lg animate-slide-up">
+            <svg class="w-5 h-5 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            <span class="text-sm font-medium" id="toast-msg">Action completed</span>
+        </div>
+    </div>
+
+    <div id="loading-overlay" class="fixed inset-0 z-50 hidden bg-black/80 flex items-center justify-center">
+        <div class="w-12 h-12 border-4 border-primary-500/30 border-t-primary-500 rounded-full animate-spin"></div>
+    </div>
+
+    <script src="app.js"></script>
+    <script src="auth-client.js"></script>
+</body>
+</html>

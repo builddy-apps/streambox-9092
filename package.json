@@ -1,0 +1,16 @@
+{
+  "name": "streambox",
+  "version": "1.0.0",
+  "description": "Premium streaming web app optimized for Samsung Tizen TV with D-pad navigation, video player, and content library management",
+  "type": "module",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "node --watch backend/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "better-sqlite3": "^11.6.0",
+    "cors": "^2.8.5"
+  }
+}
